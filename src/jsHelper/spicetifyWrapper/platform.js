@@ -84,11 +84,16 @@ function scheduleScrollingFix() {
 
 const observer = new MutationObserver(scheduleScrollingFix);
 
-observer.observe(document.body, {
-  childList: true,
-  subtree: true,
-  attributes: false,
-});
+const observeBody = () =>
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: false,
+  });
+
+// On Android the wrapper is evaluated at document start, before <body> exists.
+if (document.body) observeBody();
+else document.addEventListener("DOMContentLoaded", observeBody, { once: true });
 
 const originalPushState = history.pushState.bind(history);
 history.pushState = function (...args) {
@@ -108,7 +113,16 @@ void (async function addProxyCosmos() {
     return;
   }
 
-  const _cosmos = Spicetify.Player.origin?._cosmos ?? Spicetify.Platform?.Registry.resolve(Symbol.for("Cosmos"));
+  let _cosmos = Spicetify.Player.origin?._cosmos;
+  if (!_cosmos) {
+    try {
+      _cosmos = Spicetify.Platform?.Registry.resolve(Symbol.for("Cosmos"));
+    } catch {
+      // The web player (used by the Android port) has no Cosmos. Provide a base
+      // object so CosmosAsync still works for https:// APIs via the proxy below.
+      _cosmos = createWebCosmosFallback();
+    }
+  }
 
   const allowedMethodsMap = {
     get: "get",
@@ -125,7 +139,7 @@ void (async function addProxyCosmos() {
       const internalFetch = Reflect.get(target, prop, receiver);
 
       if (typeof internalFetch !== "function" || !allowedMethodsSet.has(prop)) return internalFetch;
-      const version = Spicetify.Platform.version.split(".").map((i) => Number.parseInt(i, 10));
+      const version = (Spicetify.Platform.version || "1.2.80").split(".").map((i) => Number.parseInt(i, 10));
       if (version[1] < 2 || (version[1] == 2 && version[2] < 31)) return internalFetch;
 
       return async function (url, body) {
@@ -173,7 +187,7 @@ void (async function addProxyCosmos() {
         if (isSpClientAPI) {
           injectedHeaders = {
             Authorization,
-            "Spotify-App-Version": Spicetify.Platform.version,
+            "Spotify-App-Version": Spicetify.Platform.version ?? "",
             "App-Platform": Spicetify.Platform.PlatformData.app_platform,
           };
         }
@@ -207,3 +221,11 @@ void (async function addProxyCosmos() {
     },
   });
 })();
+
+function createWebCosmosFallback() {
+  const unavailable = (url) => Promise.reject(new Error(`[spicetifyWrapper] ${url} is not available in the web player (no Cosmos)`));
+  const methods = ["get", "post", "del", "put", "patch", "head", "request", "resolve"];
+  const fallback = { isWebFallback: true, sub: () => ({ cancel() {} }), postSub: () => ({ cancel() {} }) };
+  for (const method of methods) fallback[method] = (url) => unavailable(url);
+  return fallback;
+}

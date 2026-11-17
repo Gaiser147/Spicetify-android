@@ -361,124 +361,134 @@ func getCustomAppChunkMaps(flags Flag) (string, string) {
 
 func insertCustomAppChunkMap(jsPath string, flags Flag) {
 	utils.ModifyFile(jsPath, func(content string) string {
-		appMap, cssEnableMap := getCustomAppChunkMaps(flags)
-
-		utils.Replace(
-			&content,
-			`\{(\d+:"xpui)`,
-			func(submatches ...string) string {
-				return fmt.Sprintf("{%s%s", appMap, submatches[1])
-			})
-
-		utils.ReplaceOnce(
-			&content,
-			`(\.u=\w+=>""\+\(\(\{)`,
-			func(submatches ...string) string {
-				return fmt.Sprintf("%s%s", submatches[1], appMap)
-			})
-
-		utils.ReplaceOnce(
-			&content,
-			`(\.f\.miniCss=function\(\w+,\w+(?:,\w+)?\).*?\(\{)([0-9:,]+)(\}\)\[\w+\])`,
-			func(submatches ...string) string {
-				return fmt.Sprintf("%s%s%s%s", submatches[1], submatches[2], cssEnableMap, submatches[3])
-			})
-
-		return content
+		return PatchCustomAppChunkMap(content, flags)
 	})
+}
+
+// PatchCustomAppChunkMap is the file-system independent part of insertCustomAppChunkMap.
+func PatchCustomAppChunkMap(content string, flags Flag) string {
+	appMap, cssEnableMap := getCustomAppChunkMaps(flags)
+
+	utils.Replace(
+		&content,
+		`\{(\d+:"xpui)`,
+		func(submatches ...string) string {
+			return fmt.Sprintf("{%s%s", appMap, submatches[1])
+		})
+
+	utils.ReplaceOnce(
+		&content,
+		`(\.u=\w+=>""\+\(\(\{)`,
+		func(submatches ...string) string {
+			return fmt.Sprintf("%s%s", submatches[1], appMap)
+		})
+
+	utils.ReplaceOnce(
+		&content,
+		`(\.f\.miniCss=function\(\w+,\w+(?:,\w+)?\).*?\(\{)([0-9:,]+)(\}\)\[\w+\])`,
+		func(submatches ...string) string {
+			return fmt.Sprintf("%s%s%s%s", submatches[1], submatches[2], cssEnableMap, submatches[3])
+		})
+
+	return content
 }
 
 func insertCustomApp(jsPath string, flags Flag) {
 	utils.ModifyFile(jsPath, func(content string) string {
-		reactSymbs, matchedReactPattern := utils.FindSymbolWithPattern(
-			"Custom app React symbols",
-			content,
-			customAppReactPatterns())
-		eleSymbs, matchedElementPattern := utils.FindSymbolWithPattern(
-			"Custom app React Element",
-			content,
-			customAppElementPatterns())
-
-		if (len(reactSymbs) < 3) || (len(eleSymbs) < 3) {
-			utils.PrintError("Spotify version mismatch with Spicetify. Please report it on our github repository.")
-			utils.PrintInfo("Spicetify might have been updated for this version already. Please run `spicetify update` to check for a new version.")
-			utils.PrintInfo("If one isn't available yet, please wait for an update to be released or downgrade Spotify to a supported version.")
-			return content
-		}
-
-		var appReactMap strings.Builder
-		var appEleMap strings.Builder
-		var appNameArray strings.Builder
-		var appMap strings.Builder
-		var cssEnableMap strings.Builder
-
-		// Spotify's new route system
-		wildcard := ""
-		if eleSymbs[2] == "" {
-			eleSymbs[2] = "children"
-		} else if eleSymbs[2] == "element" {
-			wildcard = "*"
-		}
-
-		for index, app := range flags.CustomApp {
-			appName := `spicetify-routes-` + app
-			fmt.Fprintf(&appMap, `"%s":"%s",`, appName, appName)
-			fmt.Fprintf(&appNameArray, `"%s",`, app)
-
-			fmt.Fprintf(
-				&appReactMap,
-				`,spicetifyApp%d=%s.lazy((()=>new Promise(r=>Spicetify.Events.webpackLoaded.on(r)).then(()=>%s.%s("%s")).then(%s.bind(%s,"%s"))))`,
-				index, reactSymbs[0], reactSymbs[1], reactSymbs[2],
-				appName, reactSymbs[1], reactSymbs[1], appName)
-
-			fmt.Fprintf(
-				&appEleMap,
-				`%s(%s,{path:"/%s/%s",pathV6:"/%s/*",%s:%s(spicetifyApp%d,{})}),`,
-				eleSymbs[0], eleSymbs[1], app, wildcard, app, eleSymbs[2], eleSymbs[0], index)
-
-			fmt.Fprintf(&cssEnableMap, `,"%s":1`, appName)
-		}
-
-		utils.Replace(
-			&content,
-			`\{(\d+:"xpui)`,
-			func(submatches ...string) string {
-				return fmt.Sprintf("{%s%s", appMap.String(), submatches[1])
-			})
-
-		// Seek to the full matched React.lazy pattern
-		matchedReactPattern = utils.SeekToCloseParen(
-			content,
-			matchedReactPattern,
-			'(',
-			')',
-		)
-
-		content = strings.Replace(
-			content,
-			matchedReactPattern,
-			fmt.Sprintf("%s%s", matchedReactPattern, appReactMap.String()),
-			1,
-		)
-
-		utils.ReplaceOnce(
-			&content,
-			matchedElementPattern,
-			func(submatches ...string) string {
-				return fmt.Sprintf("%s%s", appEleMap.String(), submatches[0])
-			})
-
-		content = insertNavLink(content, appNameArray.String())
-
-		utils.ReplaceOnce(
-			&content,
-			`\d+:1,\d+:1,\d+:1`,
-			func(submatches ...string) string {
-				return fmt.Sprintf("%s%s", submatches[0], cssEnableMap.String())
-			})
-
-		return content
+		return PatchCustomApp(content, flags)
 	})
+}
+
+// PatchCustomApp is the file-system independent part of insertCustomApp.
+func PatchCustomApp(content string, flags Flag) string {
+	reactSymbs, matchedReactPattern := utils.FindSymbolWithPattern(
+		"Custom app React symbols",
+		content,
+		customAppReactPatterns())
+	eleSymbs, matchedElementPattern := utils.FindSymbolWithPattern(
+		"Custom app React Element",
+		content,
+		customAppElementPatterns())
+
+	if (len(reactSymbs) < 3) || (len(eleSymbs) < 3) {
+		utils.PrintError("Spotify version mismatch with Spicetify. Please report it on our github repository.")
+		utils.PrintInfo("Spicetify might have been updated for this version already. Please run `spicetify update` to check for a new version.")
+		utils.PrintInfo("If one isn't available yet, please wait for an update to be released or downgrade Spotify to a supported version.")
+		return content
+	}
+
+	var appReactMap strings.Builder
+	var appEleMap strings.Builder
+	var appNameArray strings.Builder
+	var appMap strings.Builder
+	var cssEnableMap strings.Builder
+
+	// Spotify's new route system
+	wildcard := ""
+	if eleSymbs[2] == "" {
+		eleSymbs[2] = "children"
+	} else if eleSymbs[2] == "element" {
+		wildcard = "*"
+	}
+
+	for index, app := range flags.CustomApp {
+		appName := `spicetify-routes-` + app
+		fmt.Fprintf(&appMap, `"%s":"%s",`, appName, appName)
+		fmt.Fprintf(&appNameArray, `"%s",`, app)
+
+		fmt.Fprintf(
+			&appReactMap,
+			`,spicetifyApp%d=%s.lazy((()=>new Promise(r=>Spicetify.Events.webpackLoaded.on(r)).then(()=>%s.%s("%s")).then(%s.bind(%s,"%s"))))`,
+			index, reactSymbs[0], reactSymbs[1], reactSymbs[2],
+			appName, reactSymbs[1], reactSymbs[1], appName)
+
+		fmt.Fprintf(
+			&appEleMap,
+			`%s(%s,{path:"/%s/%s",pathV6:"/%s/*",%s:%s(spicetifyApp%d,{})}),`,
+			eleSymbs[0], eleSymbs[1], app, wildcard, app, eleSymbs[2], eleSymbs[0], index)
+
+		fmt.Fprintf(&cssEnableMap, `,"%s":1`, appName)
+	}
+
+	utils.Replace(
+		&content,
+		`\{(\d+:"xpui)`,
+		func(submatches ...string) string {
+			return fmt.Sprintf("{%s%s", appMap.String(), submatches[1])
+		})
+
+	// Seek to the full matched React.lazy pattern
+	matchedReactPattern = utils.SeekToCloseParen(
+		content,
+		matchedReactPattern,
+		'(',
+		')',
+	)
+
+	content = strings.Replace(
+		content,
+		matchedReactPattern,
+		fmt.Sprintf("%s%s", matchedReactPattern, appReactMap.String()),
+		1,
+	)
+
+	utils.ReplaceOnce(
+		&content,
+		matchedElementPattern,
+		func(submatches ...string) string {
+			return fmt.Sprintf("%s%s", appEleMap.String(), submatches[0])
+		})
+
+	content = insertNavLink(content, appNameArray.String())
+
+	utils.ReplaceOnce(
+		&content,
+		`\d+:1,\d+:1,\d+:1`,
+		func(submatches ...string) string {
+			return fmt.Sprintf("%s%s", submatches[0], cssEnableMap.String())
+		})
+
+	return content
 }
 
 func insertNavLink(str string, appNameArray string) string {
@@ -528,10 +538,11 @@ func insertHomeConfig(jsPath string, flags Flag) {
 		return
 	}
 
-	utils.ModifyFile(jsPath, patchHomeConfig)
+	utils.ModifyFile(jsPath, PatchHomeConfig)
 }
 
-func patchHomeConfig(content string) string {
+// PatchHomeConfig wires SpicetifyHomeConfig into the home feed sections.
+func PatchHomeConfig(content string) string {
 	utils.ReplaceOnceWithPriority(
 		&content,
 		[]string{
@@ -570,51 +581,61 @@ func getAssetsPath(themeFolder string) string {
 }
 
 func insertSidebarConfig(jsPath string, flags Flag) {
-	if !flags.SidebarConfig {
-		return
-	}
-
 	utils.ModifyFile(jsPath, func(content string) string {
-		utils.ReplaceOnce(
-			&content,
-			`return null!=\w+&&\w+\.totalLength(\?\w+\(\)\.createElement\(\w+,\{contextUri:)(\w+)\.uri`,
-			func(submatches ...string) string {
-				return fmt.Sprintf(`return true%s%s?.uri||""`, submatches[1], submatches[2])
-			})
-
-		return content
+		return PatchSidebarConfig(content, flags)
 	})
 }
 
-func insertExpFeatures(jsPath string, flags Flag) {
-	if !flags.ExpFeatures {
-		return
+// PatchSidebarConfig is the file-system independent part of insertSidebarConfig.
+func PatchSidebarConfig(content string, flags Flag) string {
+	if !flags.SidebarConfig {
+		return content
 	}
 
+	utils.ReplaceOnce(
+		&content,
+		`return null!=\w+&&\w+\.totalLength(\?\w+\(\)\.createElement\(\w+,\{contextUri:)(\w+)\.uri`,
+		func(submatches ...string) string {
+			return fmt.Sprintf(`return true%s%s?.uri||""`, submatches[1], submatches[2])
+		})
+
+	return content
+}
+
+func insertExpFeatures(jsPath string, flags Flag) {
 	utils.ModifyFile(jsPath, func(content string) string {
-		utils.ReplaceOnce(
-			&content,
-			`(function \w+\((\w+)\)\{)(\w+ \w+=\w\.name;if\("internal")`,
-			func(submatches ...string) string {
-				return fmt.Sprintf("%s%s=Spicetify.expFeatureOverride(%s);%s", submatches[1], submatches[2], submatches[2], submatches[3])
-			})
-
-		// utils.ReplaceOnce(
-		// 	&content,
-		// 	`(\w+\.fromJSON)(\s*=\s*function\b[^{]*{[^}]*})`,
-		// 	func(submatches ...string) string {
-		// 		return fmt.Sprintf("%s=Spicetify.createInternalMap%s", submatches[1], submatches[2])
-		// 	})
-
-		utils.ReplaceOnce(
-			&content,
-			`(([\w$.]+\.fromJSON)\(\w+\)+;)(return ?[\w{}().,]+[\w$]+\.Provider,)(\{value:\{localConfiguration)`,
-			func(submatches ...string) string {
-				return fmt.Sprintf("%sSpicetify.createInternalMap=%s;%sSpicetify.RemoteConfigResolver=%s", submatches[1], submatches[2], submatches[3], submatches[4])
-			})
-
-		return content
+		return PatchExpFeatures(content, flags)
 	})
+}
+
+// PatchExpFeatures is the file-system independent part of insertExpFeatures.
+func PatchExpFeatures(content string, flags Flag) string {
+	if !flags.ExpFeatures {
+		return content
+	}
+
+	utils.ReplaceOnce(
+		&content,
+		`(function \w+\((\w+)\)\{)(\w+ \w+=\w\.name;if\("internal")`,
+		func(submatches ...string) string {
+			return fmt.Sprintf("%s%s=Spicetify.expFeatureOverride(%s);%s", submatches[1], submatches[2], submatches[2], submatches[3])
+		})
+
+	// utils.ReplaceOnce(
+	// 	&content,
+	// 	`(\w+\.fromJSON)(\s*=\s*function\b[^{]*{[^}]*})`,
+	// 	func(submatches ...string) string {
+	// 		return fmt.Sprintf("%s=Spicetify.createInternalMap%s", submatches[1], submatches[2])
+	// 	})
+
+	utils.ReplaceOnce(
+		&content,
+		`(([\w$.]+\.fromJSON)\(\w+\)+;)(return ?[\w{}().,]+[\w$]+\.Provider,)(\{value:\{localConfiguration)`,
+		func(submatches ...string) string {
+			return fmt.Sprintf("%sSpicetify.createInternalMap=%s;%sSpicetify.RemoteConfigResolver=%s", submatches[1], submatches[2], submatches[3], submatches[4])
+		})
+
+	return content
 }
 
 func insertVersionInfo(jsPath string, flags Flag) {
@@ -632,4 +653,28 @@ func insertVersionInfo(jsPath string, flags Flag) {
 			})
 		return content
 	})
+}
+
+// SupportsCustomAppInjection reports whether content holds the React.lazy
+// route table that custom apps are injected into.
+func SupportsCustomAppInjection(content string) bool {
+	return supportsCustomAppInjection(content)
+}
+
+// BuildCustomAppChunk wraps a custom app's (already concatenated) JavaScript
+// into an rspack/webpack chunk named spicetify-routes-<app>.
+func BuildCustomAppChunk(app string, jsContent string) string {
+	appName := `spicetify-routes-` + app
+	return fmt.Sprintf(
+		`((e)=>{const t=e.rspackChunk||e.rspackChunkclient_web||e.webpackChunkclient_web||[];return e.rspackChunk=e.rspackChunk||t,e.rspackChunkclient_web=e.rspackChunkclient_web||t,e.webpackChunkclient_web=e.webpackChunkclient_web||t,t})("undefined"!=typeof self?self:globalThis).push([["%s"],{"%s":(e,t,n)=>{
+"use strict";n.r(t),n.d(t,{default:()=>render});
+%s
+}}]);`,
+		appName, appName, jsContent)
+}
+
+// ColorCSS returns the colors.css content (--spice-* variables) for a scheme.
+// A nil scheme yields Spicetify's base colors.
+func ColorCSS(scheme map[string]string) string {
+	return getColorCSS(scheme)
 }

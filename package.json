@@ -6,9 +6,10 @@
     "build:wrapper": "node scripts/build-wrapper.mjs",
     "check:wrapper": "node scripts/build-wrapper.mjs --check",
     "css-map:update": "node scripts/update-cssmap.mjs",
-    "fmt": "oxfmt scripts src/jsHelper/spicetifyWrapper package.json .oxfmtrc.json .oxlintrc.json Extensions CustomApps",
-    "fmt:check": "oxfmt --check scripts src/jsHelper/spicetifyWrapper package.json .oxfmtrc.json .oxlintrc.json Extensions CustomApps",
-    "lint": "oxlint ."
+    "fmt": "oxfmt scripts src/jsHelper/spicetifyWrapper android/web android/e2e package.json .oxfmtrc.json .oxlintrc.json Extensions CustomApps",
+    "fmt:check": "oxfmt --check scripts src/jsHelper/spicetifyWrapper android/web android/e2e package.json .oxfmtrc.json .oxlintrc.json Extensions CustomApps",
+    "lint": "oxlint .",
+    "e2e:android": "node android/e2e/e2e.mjs"
   },
   "devDependencies": {
     "esbuild": "0.25.11",

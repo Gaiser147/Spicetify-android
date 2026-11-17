@@ -1,3 +1,4 @@
+import { withPlayerCompat } from "../player-compat.js";
 import { fnStr } from "../shared/string.js";
 import { createReactComponents } from "./react-components.js";
 import { findReactQuery } from "./react-query.js";
@@ -47,7 +48,7 @@ export function createSpicetifyBindings({
     Player: {
       ...Spicetify.Player,
       get origin() {
-        return Spicetify.Platform?.PlayerAPI;
+        return withPlayerCompat(Spicetify.Platform?.PlayerAPI);
       },
     },
     GraphQL: {
