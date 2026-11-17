@@ -36,10 +36,15 @@ class SpicetifyInterceptor(
 
     private val locks = ConcurrentHashMap<String, Any>()
 
+    /** Patched assets served from the cache (logged once per page load). */
+    @Volatile
+    var hits = 0
+
     fun intercept(request: WebResourceRequest): WebResourceResponse? {
         if (request.method != "GET") return null
-        if (engine.safeMode) return null
         val url = request.url
+        if (isServiceWorkerScript(url)) return notFound()
+        if (engine.safeMode) return null
         return try {
             when {
                 url.host == CDN_HOST && url.path?.startsWith(CDN_PATH) == true -> cdnAsset(request)
@@ -65,7 +70,10 @@ class SpicetifyInterceptor(
         if (Spicengine.assetKind(url).isEmpty()) return null
 
         val key = engine.cacheKey
-        cache.get(url, key)?.let { return ok(SpicetifyResource(mimeFor(url), it), cors = true) }
+        cache.get(url, key)?.let {
+            hits++
+            return ok(SpicetifyResource(mimeFor(url), it), cors = true)
+        }
 
         // One download/patch per URL at a time.
         val lock = locks.getOrPut(url) { Any() }
@@ -153,6 +161,13 @@ class SpicetifyInterceptor(
 
     companion object {
         private const val TAG = "SpicetifyInterceptor"
+
+        /** The web player's service worker; it would cache unpatched bundles. */
+        fun isServiceWorkerScript(url: Uri): Boolean =
+            url.host == WEB_HOST && url.path.orEmpty().endsWith("service-worker.js")
+
+        fun notFoundResponse() =
+            WebResourceResponse("text/plain", "utf-8", 404, "Not Found", emptyMap(), ByteArrayInputStream(ByteArray(0)))
         const val WEB_HOST = "open.spotify.com"
         const val CDN_HOST = "open.spotifycdn.com"
         const val CDN_PATH = "/cdn/build/web-player/"

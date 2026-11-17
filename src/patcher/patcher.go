@@ -374,10 +374,43 @@ func nonNil(s []string) []string {
 // ('unsafe-eval' is allowed by the web player's CSP) so that the Spicetify
 // global exists before the patched bundles execute. Everything else is
 // appended as same-origin elements as soon as the DOM allows.
+//
+// The web player's service worker precaches the original bundles and would
+// serve them unpatched on later visits (in an Android WebView its requests
+// bypass the app's request interceptor). Service worker support is therefore
+// hidden from the page, existing registrations and their caches are removed,
+// and a page still controlled by an old service worker is reloaded once.
 const documentStartTemplate = `(function(){
 if (window.top !== window || window.__spicetifyAndroidBoot) return;
 if (!/^https:\/\/open\.spotify\.com$/.test(location.origin)) return;
 window.__spicetifyAndroidBoot = true;
+var sw = navigator.serviceWorker;
+if (sw) {
+  // Spotify only registers its worker when "serviceWorker" in navigator;
+  // without it the web player takes its path for browsers without support.
+  try { delete Navigator.prototype.serviceWorker; } catch (e) {}
+  if ("serviceWorker" in navigator) {
+    try {
+      Object.defineProperty(sw, "register", { configurable: true, value: function () {
+        return Promise.reject(new DOMException("Service workers are disabled by Spicetify", "SecurityError"));
+      } });
+    } catch (e) {}
+  }
+  var controlled = !!sw.controller;
+  var cleanup = [];
+  if (sw.getRegistrations) cleanup.push(sw.getRegistrations().then(function (regs) {
+    return Promise.all(regs.map(function (r) { return r.unregister(); }));
+  }));
+  if (window.caches && caches.keys) cleanup.push(caches.keys().then(function (keys) {
+    return Promise.all(keys.filter(function (k) { return /workbox|precache/i.test(k); }).map(function (k) { return caches.delete(k); }));
+  }));
+  Promise.all(cleanup).then(function () {
+    if (!controlled) return;
+    var flag = "spicetify-android:sw-reload";
+    try { if (sessionStorage.getItem(flag)) return; sessionStorage.setItem(flag, "1"); } catch (e) { return; }
+    location.reload();
+  }, function () {});
+}
 var base = %s;
 var config = %s;
 var styles = %s;

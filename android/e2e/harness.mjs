@@ -79,7 +79,13 @@ export async function startHarness({ out, marketplace = "", apps: baseApps = ["l
   const boot = await (await fetch(`${hostUrl}/boot.js`)).text();
 
   /** Opens open.spotify.com with Spicetify injected. */
-  async function openPlayer(contextOptions = {}) {
+  /**
+   * @param {object} contextOptions Playwright context options.
+   * @param {{preinstallServiceWorker?: boolean}} [options] preinstallServiceWorker:
+   *   first load Spotify without Spicetify so its service worker caches the
+   *   original bundles (like an existing install), then load with Spicetify.
+   */
+  async function openPlayer(contextOptions = {}, { preinstallServiceWorker = false } = {}) {
     const browser = await chromium.launch();
     const context = await browser.newContext({ userAgent: DESKTOP_UA, locale: "en-US", ...contextOptions });
     const errors = [];
@@ -95,6 +101,20 @@ export async function startHarness({ out, marketplace = "", apps: baseApps = ["l
     page.on("console", (m) => {
       if (m.type() === "error" || m.type() === "warning" || /spicetify/i.test(m.text())) errors.push(`[console.${m.type()}] ${m.text()}`);
     });
+
+    if (preinstallServiceWorker) {
+      await page.goto("https://open.spotify.com/", { waitUntil: "domcontentloaded", timeout: 90_000 });
+      await page.waitForFunction(
+        async () => (await caches.keys()).some((k) => /precache/.test(k)) && !!(await navigator.serviceWorker.getRegistration())?.active,
+        null,
+        { timeout: 60_000, polling: 1000 },
+      );
+      // Reload so the page is controlled by the service worker (Chromium does
+      // not always hand control over; the cached bundles exist either way).
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await page.waitForFunction(() => !!navigator.serviceWorker.controller, null, { timeout: 15_000 }).catch(() => {});
+      stats.navigations = 0;
+    }
 
     await context.addInitScript({ content: boot });
     // Requests can still be in flight when the browser closes; their errors

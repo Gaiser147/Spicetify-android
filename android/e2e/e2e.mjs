@@ -6,7 +6,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { DESKTOP_UA, arg, devices, repo, startHarness } from "./harness.mjs";
+import { DESKTOP_UA, arg, devices, repo, startHarness, waitForStablePage } from "./harness.mjs";
 
 const out = resolve(arg("--out", join(repo, "build/e2e")));
 mkdirSync(out, { recursive: true });
@@ -46,6 +46,8 @@ const check = (name, ok, detail = "") => {
   check("Spicetify core APIs available", state);
   // A reload on the first start leaves the Android WebView blank.
   check("No page reload on first start", stats.navigations === 1, `${stats.navigations} navigation(s)`);
+  const sw = await page.evaluate(() => ({ api: "serviceWorker" in navigator, controller: !!globalThis.navigator.serviceWorker?.controller }));
+  check("Service worker disabled", !sw.api && !sw.controller, JSON.stringify(sw));
   const info = await page.evaluate(() => ({
     config: window.Spicetify?.Config,
     platformKeys: Object.keys(window.Spicetify?.Platform || {}).length,
@@ -125,6 +127,31 @@ const check = (name, ok, detail = "") => {
   await page.waitForTimeout(3000);
   await page.screenshot({ path: join(out, "desktop-home.png") });
   writeFileSync(join(out, "desktop-errors.log"), errors.join("\n"));
+  await browser.close();
+}
+
+// Existing install: the web player's service worker already cached the
+// original (unpatched) bundles. Spicetify must still be applied.
+{
+  const { browser, page, errors } = await openPlayer({ viewport: { width: 1280, height: 800 } }, { preinstallServiceWorker: true });
+  const info = await page.evaluate(async () => ({
+    platformApis: Object.keys(window.Spicetify?.Platform || {}).length,
+    patched: typeof window.Spicetify?.showNotification === "function",
+    swApi: "serviceWorker" in navigator,
+    precache: (await caches.keys()).filter((k) => /workbox|precache/.test(k)).length,
+  }));
+  check("Existing service worker: Spicetify still applied", info.platformApis > 20 && info.patched, JSON.stringify(info));
+  check("Existing service worker hidden from the page", !info.swApi);
+  // Leave and come back (as with the login page): Spicetify must still apply.
+  await page.goto("https://www.spotify.com/", { waitUntil: "domcontentloaded" }).catch(() => {});
+  await page.goto("https://open.spotify.com/", { waitUntil: "domcontentloaded" });
+  await waitForStablePage(page);
+  const again = await page.evaluate(() => ({
+    platformApis: Object.keys(window.Spicetify?.Platform || {}).length,
+    patched: typeof window.Spicetify?.showNotification === "function",
+  }));
+  check("Spicetify applied after leaving and returning", again.platformApis > 20 && again.patched, JSON.stringify(again));
+  writeFileSync(join(out, "sw-errors.log"), errors.join("\n"));
   await browser.close();
 }
 
