@@ -9,9 +9,14 @@
   if (window.SpicetifyAndroidBridge) return;
 
   const native = window.SpicetifyAndroid || null;
+  // The app injects `SpicetifyAndroid` with WebViewCompat.addWebMessageListener
+  // (postMessage, restricted to open.spotify.com) or, on old WebViews, as a
+  // @JavascriptInterface with one method per message.
   const send = (method, ...args) => {
     try {
-      if (native && typeof native[method] === "function") native[method](...args);
+      if (!native) return;
+      if (typeof native[method] === "function") native[method](...args);
+      else if (typeof native.postMessage === "function") native.postMessage(JSON.stringify({ method, args }));
     } catch (e) {
       console.warn("[spicetify-android] native call failed", method, e);
     }

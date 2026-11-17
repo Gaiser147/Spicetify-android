@@ -46,7 +46,7 @@ export async function startHarness({ out, marketplace = "", apps: baseApps = ["l
       c === 0 ? res() : rej(new Error("go build failed")),
     ),
   );
-  const cssMap = join(repo, "css-map-web.json");
+  const cssMap = join(repo, "css-map.json");
   const devhost = spawn(
     devhostBin,
     [

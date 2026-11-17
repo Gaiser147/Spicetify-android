@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="back">Zurück</string>
+
+    <string name="tab_extensions">Erweiterungen</string>
+    <string name="tab_themes">Themes</string>
+    <string name="tab_apps">Apps</string>
+    <string name="tab_snippets">Snippets</string>
+    <string name="tab_settings">Einstellungen</string>
+
+    <string name="add_from_url">Per URL</string>
+    <string name="import_file">Datei importieren</string>
+    <string name="install">Installieren</string>
+    <string name="installed">Installiert</string>
+    <string name="import_failed">Import fehlgeschlagen</string>
+    <string name="cancel">Abbrechen</string>
+    <string name="delete">Löschen</string>
+    <string name="edit">Bearbeiten</string>
+    <string name="save">Speichern</string>
+    <string name="name">Name</string>
+    <string name="untitled">Ohne Titel</string>
+
+    <string name="extensions_hint">Erweiterungen laufen im Spotify-Web-Player. Die meisten Desktop-Erweiterungen von Spicetify funktionieren. Weitere gibt es über die Marketplace-App (Seitenleiste), oder du fügst hier .js-Dateien hinzu. Änderungen gelten, sobald du zum Player zurückkehrst.</string>
+    <string name="add_extension">Erweiterung hinzufügen</string>
+    <string name="add_extension_hint">Link zu einer .js-Datei. GitHub-Dateiseiten werden automatisch in Raw-Links umgewandelt.</string>
+
+    <string name="themes_hint">Themes ändern Farben (color.ini) und Stile (user.css). Themes aus dem Marketplace funktionieren ebenfalls.</string>
+    <string name="add_theme">Theme hinzufügen</string>
+    <string name="add_zip_hint">Link zu einem .zip-Archiv, zum Beispiel einem GitHub-Download (Code → Download ZIP).</string>
+    <string name="theme">Theme</string>
+    <string name="theme_none">Keins (Spotify-Standard)</string>
+    <string name="color_scheme">Farbschema</string>
+    <string name="theme_options">Optionen</string>
+    <string name="opt_replace_colors">Theme-Farben anwenden</string>
+    <string name="opt_inject_css">Theme-CSS anwenden</string>
+    <string name="opt_inject_theme_js">Theme-Skript ausführen</string>
+
+    <string name="apps_hint">Custom Apps fügen eigene Seiten in der Seitenleiste hinzu, etwa den Marketplace oder Lyrics Plus.</string>
+    <string name="add_app">Custom App hinzufügen</string>
+
+    <string name="snippets_hint">Snippets sind kleine CSS-Anpassungen, die zusätzlich zum Theme gelten.</string>
+    <string name="add_snippet">Snippet hinzufügen</string>
+    <string name="edit_snippet">Snippet bearbeiten</string>
+
+    <string name="layout">Layout</string>
+    <string name="layout_auto">Automatisch (Handy-Layout auf kleinen Bildschirmen)</string>
+    <string name="layout_mobile">Immer Handy-Layout</string>
+    <string name="layout_desktop">Immer Desktop-Layout</string>
+    <string name="features">Funktionen</string>
+    <string name="opt_expose_apis">Spotify-APIs freigeben</string>
+    <string name="opt_expose_apis_desc">Wird von Erweiterungen und Custom Apps benötigt.</string>
+    <string name="opt_sidebar_config">Seitenleisten-Konfiguration</string>
+    <string name="opt_home_config">Startseiten-Konfiguration</string>
+    <string name="opt_exp_features">Experimentelle Funktionen</string>
+    <string name="privacy">Datenschutz</string>
+    <string name="opt_disable_sentry">Sentry-Fehlerberichte deaktivieren</string>
+    <string name="opt_disable_logging">Interaktions-Logging deaktivieren</string>
+    <string name="opt_remove_rtl">Rechts-nach-links-CSS entfernen</string>
+    <string name="opt_external_links">Externe Links im Browser öffnen</string>
+    <string name="maintenance">Wartung</string>
+    <string name="opt_webview_debugging">WebView-Debugging</string>
+    <string name="opt_webview_debugging_desc">Den Player am Computer über chrome://inspect untersuchen.</string>
+    <string name="clear_cache">Patch-Cache leeren</string>
+    <string name="clear_cache_desc">Gepatchte Spotify-Dateien: %1$d MB. Sie werden beim nächsten Start neu erzeugt.</string>
+    <string name="cache_cleared">Patch-Cache geleert</string>
+    <string name="about">Über</string>
+    <string name="about_text">Spicetify für Android führt den Spotify-Web-Player mit den Patches, Erweiterungen, Themes und Custom Apps von Spicetify aus. Kein offizielles Spotify-Produkt. Für die Wiedergabe muss Android System WebView Widevine unterstützen.</string>
+</resources>
