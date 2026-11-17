@@ -58,6 +58,7 @@ const check = (name, ok, detail = "") => {
     userCss: [...document.querySelectorAll("link.userCSS")].map((l) => l.getAttribute("href")),
     bridge: typeof window.SpicetifyAndroidBridge?.command === "function",
     playerShim: typeof window.Spicetify?.Player?.origin?._events?.addListener === "function",
+    playerUntouched: ["_state", "_events", "_queue", "_cosmos"].filter((k) => Object.hasOwn(window.Spicetify?.Platform?.PlayerAPI || {}, k)),
   }));
   check("Spicetify.Config injected", info.config?.platform === "android", JSON.stringify(info.config?.custom_apps));
   check("Spicetify.Platform resolved", info.platformKeys > 20, `${info.platformKeys} APIs`);
@@ -67,6 +68,24 @@ const check = (name, ok, detail = "") => {
   check("Theme colors applied", info.colors.startsWith("#"), info.colors);
   check("Android bridge loaded", info.bridge);
   check("PlayerAPI compatibility shim", info.playerShim);
+  check("Spotify's PlayerAPI object left unchanged", info.playerUntouched.length === 0, JSON.stringify(info.playerUntouched));
+  // Marketplace extensions load from cdn.jsdelivr.net, snippets and themes use inline scripts.
+  const csp = await page.evaluate(async () => {
+    const load = (setup) =>
+      new Promise((resolve) => {
+        const s = document.createElement("script");
+        setup(s);
+        s.onload = () => resolve(true);
+        s.onerror = () => resolve(false);
+        document.head.appendChild(s);
+        if (!s.src) setTimeout(() => resolve(window.__e2eInline === 1), 200);
+      });
+    return {
+      jsdelivr: (await load((s) => (s.src = "https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"))) && typeof window._?.chunk === "function",
+      inline: await load((s) => (s.textContent = "window.__e2eInline = 1")),
+    };
+  });
+  check("Extension scripts from cdn.jsdelivr.net and inline scripts allowed", csp.jsdelivr && csp.inline, JSON.stringify(csp));
 
   // Custom app links in the top bar (with names and icons from the manifests).
   const navLinks = await page
@@ -127,6 +146,18 @@ const check = (name, ok, detail = "") => {
     check("Custom app /marketplace renders", mp);
     await page.waitForTimeout(3000);
     await page.screenshot({ path: join(out, "desktop-marketplace.png") });
+
+    // The Marketplace reloads the page after installing an extension or theme.
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await waitForStablePage(page);
+    const reloaded = await page
+      .waitForFunction(() => location.pathname.startsWith("/marketplace") && !!document.querySelector("#main-view [class*=marketplace]"), null, {
+        timeout: 30_000,
+      })
+      .then(() => true)
+      .catch(() => false);
+    const shellDoc = stats.documents.find((d) => d.path.startsWith("/marketplace"));
+    check("Reload on /marketplace renders the Marketplace", reloaded && shellDoc?.shell === "/", JSON.stringify(shellDoc));
   }
 
   // Android Auto library: search and browse through the bridge (works without login).

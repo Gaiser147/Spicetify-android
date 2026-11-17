@@ -20,8 +20,11 @@ import java.util.concurrent.ConcurrentHashMap
  *  - web player JS/CSS bundles from the CDN are downloaded, patched and cached,
  *  - custom app chunks (spicetify-routes-<app>) are generated,
  *  - /__spicetify/... on open.spotify.com serves Spicetify's files,
- *  - optionally the main document, to inject the boot script on WebViews
- *    without DOCUMENT_START_SCRIPT support.
+ *  - the main document: custom app routes (/marketplace, ...) only exist on
+ *    the client, so reloading one loads the app shell instead of Spotify's
+ *    404 page; the CSP is opened up for extension scripts like on the
+ *    desktop; and on WebViews without DOCUMENT_START_SCRIPT support the boot
+ *    script is injected.
  * Everything else goes to the network untouched.
  */
 class SpicetifyInterceptor(
@@ -50,7 +53,7 @@ class SpicetifyInterceptor(
                 url.host == CDN_HOST && url.path?.startsWith(CDN_PATH) == true -> cdnAsset(request)
                 url.host == WEB_HOST && url.path?.startsWith(EngineManager.BASE_PATH) == true -> spicetifyFile(url)
                 url.host == WEB_HOST && MANIFEST_RE.containsMatchIn(url.path.orEmpty()) -> customAppManifest(url)
-                injectIntoDocument && request.isForMainFrame && url.host == WEB_HOST -> document(request)
+                request.isForMainFrame && url.host == WEB_HOST -> document(request)
                 else -> null
             }
         } catch (e: Exception) {
@@ -122,29 +125,47 @@ class SpicetifyInterceptor(
         return ok(SpicetifyResource("application/json", engine.customAppManifest(app)), cors = false, cache = false)
     }
 
-    /** Fallback: fetch the HTML ourselves and add the boot script to <head>. */
+    /**
+     * Loads the page document ourselves: custom app routes get the app shell,
+     * the CSP's script-src is opened up and, without document start script
+     * support, the boot script is added to <head>. Anything that is not a
+     * plain 200 HTML response goes back to the WebView (redirects, errors).
+     */
     private fun document(request: WebResourceRequest): WebResourceResponse? {
-        val accept = request.requestHeaders["Accept"].orEmpty()
-        if (!accept.contains("text/html")) return null
-        val url = request.url.toString()
+        val accept = request.requestHeaders.entries.firstOrNull { it.key.equals("Accept", true) }?.value
+        if (accept != null && !accept.contains("text/html") && !accept.contains("*/*")) return null
+        val pageUrl = request.url.toString()
+        val shell = engine.documentShellPath(request.url.path.orEmpty())
+        val url = if (shell.isNotEmpty()) request.url.buildUpon().path(shell).build().toString() else pageUrl
         val cookies = CookieManager.getInstance()
         val builder = Request.Builder().url(url)
         for ((k, v) in request.requestHeaders) {
-            if (k.equals("Accept-Encoding", true)) continue
+            if (k.equals("Accept-Encoding", true) || k.equals("Cookie", true)) continue
             builder.header(k, v)
         }
         builder.header("User-Agent", userAgent)
         cookies.getCookie(url)?.let { builder.header("Cookie", it) }
-        http.newBuilder().followRedirects(false).build().newCall(builder.build()).execute().use { res ->
+        val client = if (shell.isNotEmpty()) http else http.newBuilder().followRedirects(false).build()
+        client.newCall(builder.build()).execute().use { res ->
             storeCookies(url, res.headers)
-            if (res.code != 200 || res.body?.contentType()?.subtype != "html") return null
-            val html = res.body!!.string()
-            val tag = "<script src=\"${EngineManager.BASE_PATH}boot.js\"></script>"
-            val head = Regex("<head[^>]*>", RegexOption.IGNORE_CASE).find(html)
-            val injected = if (head != null) html.replaceRange(head.range.last + 1, head.range.last + 1, tag) else tag + html
+            if (res.code != 200 || res.body?.contentType()?.subtype != "html") {
+                if (shell.isNotEmpty()) DiagnosticsLog.log("document", "shell $url: HTTP ${res.code}")
+                return null
+            }
+            var html = res.body!!.string()
+            if (injectIntoDocument) {
+                val tag = "<script src=\"${EngineManager.BASE_PATH}boot.js\"></script>"
+                val head = Regex("<head[^>]*>", RegexOption.IGNORE_CASE).find(html)
+                html = if (head != null) html.replaceRange(head.range.last + 1, head.range.last + 1, tag) else tag + html
+            }
+            if (shell.isNotEmpty()) DiagnosticsLog.log("document", "${request.url.path} -> app shell $shell")
             val headers = HashMap<String, String>()
-            res.headers["Content-Security-Policy"]?.let { headers["Content-Security-Policy"] = it }
-            return WebResourceResponse("text/html", "utf-8", 200, "OK", headers, ByteArrayInputStream(injected.toByteArray()))
+            headers["Cache-Control"] = "no-store"
+            res.headers["Content-Security-Policy"]?.let { headers["Content-Security-Policy"] = Spicengine.rewriteCSP(it) }
+            res.headers["Content-Security-Policy-Report-Only"]?.let {
+                headers["Content-Security-Policy-Report-Only"] = Spicengine.rewriteCSP(it)
+            }
+            return WebResourceResponse("text/html", "utf-8", 200, "OK", headers, ByteArrayInputStream(html.toByteArray()))
         }
     }
 

@@ -253,8 +253,11 @@ class SpotifyWebView(
         }
 
         override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: WebResourceResponse) {
-            if (request.isForMainFrame || request.url.host == SpicetifyInterceptor.CDN_HOST) {
-                DiagnosticsLog.log("net", "HTTP ${response.statusCode} for ${request.url}")
+            val host = request.url.host.orEmpty()
+            // Main frame, patched bundles and Spotify's APIs (playback licence,
+            // spclient): those failures explain a broken page or player.
+            if (request.isForMainFrame || host == SpicetifyInterceptor.CDN_HOST || host.endsWith(".spotify.com")) {
+                DiagnosticsLog.log("net", "HTTP ${response.statusCode} ${request.method} ${request.url}")
             }
         }
 

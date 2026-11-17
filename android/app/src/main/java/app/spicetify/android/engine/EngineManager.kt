@@ -87,6 +87,9 @@ class EngineManager(
 
     fun report(): String = current().engine.report()
 
+    /** "/" or "/intl-xx/" for a custom app route (client side only), "" otherwise. */
+    fun documentShellPath(path: String): String = current().engine.documentShellPath(path)
+
     /** Serves a path below /__spicetify/ (without the prefix). */
     fun resolve(rel: String): SpicetifyResource? {
         if (rel == "boot.js") return SpicetifyResource("text/javascript", documentStartScript().toByteArray())
