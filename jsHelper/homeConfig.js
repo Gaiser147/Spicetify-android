@@ -214,6 +214,8 @@ SpicetifyHomeConfig = {};
   };
 
   await new Promise((res) => Spicetify.Events.platformLoaded.on(res));
+  // The web player resolves History after the platform (Android port).
+  while (!Spicetify.Platform?.History?.location) await new Promise((res) => setTimeout(res, 100));
   if (Spicetify.Platform.History.location.pathname === "/") SpicetifyHomeConfig.addToMenu();
 
   Spicetify.Platform.History.listen(({ pathname }) => {
