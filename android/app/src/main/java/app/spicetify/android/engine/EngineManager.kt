@@ -80,14 +80,16 @@ class EngineManager(
         val layout = configRepository.current.layoutMode
         // mobile.js reads the forced layout from localStorage.
         val layoutInit = "try{localStorage.setItem('spicetify-android:layout','${layout.value}')}catch(e){}"
-        return layoutInit + "\n" + diagnosticsScript() + "\n" + current().engine.documentStartScript()
+        return layoutInit + "\n" + baseScript() + "\n" + current().engine.documentStartScript()
     }
 
     /**
-     * Playback diagnostics (android/web/diagnostics.js). Part of the start
-     * script and, in safe mode, the only script added to the page.
+     * Playback diagnostics (android/web/diagnostics.js) and the one-time
+     * storage cleanup (android/web/migrate.js). Part of the start script and,
+     * in safe mode, the only script added to the page.
      */
-    fun diagnosticsScript(): String = files.readText("android/diagnostics.js").orEmpty()
+    fun baseScript(): String =
+        files.readText("android/diagnostics.js").orEmpty() + "\n" + files.readText("android/migrate.js").orEmpty()
 
     fun patchAsset(url: String, content: String): String = current().engine.patchAsset(url, content)
 
