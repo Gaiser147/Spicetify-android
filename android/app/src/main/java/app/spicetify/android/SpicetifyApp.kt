@@ -2,6 +2,7 @@ package app.spicetify.android
 
 import android.app.Application
 import android.content.Intent
+import android.webkit.WebSettings
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
@@ -12,6 +13,7 @@ import app.spicetify.android.engine.EngineManager
 import app.spicetify.android.spicengine.Spicengine
 import app.spicetify.android.web.PatchCache
 import app.spicetify.android.web.SpicetifyInterceptor
+import app.spicetify.android.web.UserAgents
 import okhttp3.Cache
 import okhttp3.OkHttpClient
 import java.io.File
@@ -31,7 +33,11 @@ class SpicetifyApp : Application() {
     lateinit var interceptor: SpicetifyInterceptor
         private set
 
-    val userAgent: String by lazy { Spicengine.desktopUserAgent() }
+    /** Desktop Chrome user agent matching the installed WebView's version. */
+    val userAgent: String by lazy {
+        val webView = runCatching { WebSettings.getDefaultUserAgent(this) }.getOrNull()
+        if (webView != null) UserAgents.desktop(webView) else Spicengine.desktopUserAgent()
+    }
 
     override fun onCreate() {
         super.onCreate()

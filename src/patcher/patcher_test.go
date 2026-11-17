@@ -62,6 +62,8 @@ func TestDocumentStartScript(t *testing.T) {
 		`"custom_apps":["lyrics-plus"]`,
 		`"platform":"android"`,
 		`"/__spicetify/"`,
+		`delete Navigator.prototype.serviceWorker`,
+		`unregister()`,
 	} {
 		if !strings.Contains(s, want) {
 			t.Errorf("document start script is missing %s", want)

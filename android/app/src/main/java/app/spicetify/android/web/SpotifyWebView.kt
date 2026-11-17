@@ -22,6 +22,8 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.webkit.ScriptHandler
+import androidx.webkit.ServiceWorkerClientCompat
+import androidx.webkit.ServiceWorkerControllerCompat
 import androidx.webkit.UserAgentMetadata
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewCompat
@@ -53,6 +55,8 @@ class SpotifyWebView(
         private set
 
     private var startScript: ScriptHandler? = null
+    private var defaultMetadata: UserAgentMetadata? = null
+    private var loginMode: Boolean? = null
     private var startScriptSource: String? = null
 
     /** True when the boot script is injected with DOCUMENT_START_SCRIPT. */
@@ -75,7 +79,6 @@ class SpotifyWebView(
             javaScriptEnabled = true
             domStorageEnabled = true
             mediaPlaybackRequiresUserGesture = false
-            userAgentString = app.userAgent
             javaScriptCanOpenWindowsAutomatically = true
             setSupportMultipleWindows(false)
             loadWithOverviewMode = true
@@ -94,9 +97,11 @@ class SpotifyWebView(
         // not enough, because Chromium also sends client hints ("Android
         // WebView", mobile).
         if (WebViewFeature.isFeatureSupported(WebViewFeature.USER_AGENT_METADATA)) {
-            runCatching { WebSettingsCompat.setUserAgentMetadata(view.settings, desktopUserAgentMetadata()) }
-                .onFailure { DiagnosticsLog.log("webview", "user agent metadata: $it") }
+            defaultMetadata = runCatching { WebSettingsCompat.getUserAgentMetadata(view.settings) }.getOrNull()
         }
+        applyLoginMode(false)
+        DiagnosticsLog.log("webview", "user agent: ${app.userAgent}")
+        installServiceWorkerClient()
 
         CookieManager.getInstance().apply {
             setAcceptCookie(true)
@@ -123,8 +128,51 @@ class SpotifyWebView(
         return true
     }
 
+    /**
+     * Login pages run with the WebView's own user agent and client hints; the
+     * web player with the desktop ones. Returns true if the mode changed.
+     */
+    private fun applyLoginMode(login: Boolean): Boolean {
+        if (loginMode == login) return false
+        loginMode = login
+        val settings = webView.settings
+        settings.userAgentString = if (login) null else app.userAgent
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.USER_AGENT_METADATA)) {
+            runCatching {
+                val metadata = if (login) defaultMetadata else desktopUserAgentMetadata()
+                if (metadata != null) WebSettingsCompat.setUserAgentMetadata(settings, metadata)
+            }.onFailure { DiagnosticsLog.log("webview", "user agent metadata: $it") }
+        }
+        DiagnosticsLog.log("webview", if (login) "login pages: device user agent" else "web player: desktop user agent")
+        return true
+    }
+
+    /**
+     * Requests of service workers do not pass through the WebViewClient. The
+     * web player's worker would cache the original bundles, so its script is
+     * blocked and any other worker request goes through the interceptor.
+     */
+    private fun installServiceWorkerClient() {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.SERVICE_WORKER_BASIC_USAGE) ||
+            !WebViewFeature.isFeatureSupported(WebViewFeature.SERVICE_WORKER_SHOULD_INTERCEPT_REQUEST)
+        ) {
+            return
+        }
+        runCatching {
+            ServiceWorkerControllerCompat.getInstance().setServiceWorkerClient(object : ServiceWorkerClientCompat() {
+                override fun shouldInterceptRequest(request: WebResourceRequest): WebResourceResponse? {
+                    if (SpicetifyInterceptor.isServiceWorkerScript(request.url)) {
+                        DiagnosticsLog.log("sw", "blocked ${request.url}")
+                        return SpicetifyInterceptor.notFoundResponse()
+                    }
+                    return app.interceptor.intercept(request)
+                }
+            })
+        }.onFailure { DiagnosticsLog.log("sw", "service worker client: $it") }
+    }
+
     private fun desktopUserAgentMetadata(): UserAgentMetadata {
-        val major = Regex("Chrome/(\\d+)").find(app.userAgent)?.groupValues?.get(1) ?: "131"
+        val major = UserAgents.chromeMajor(app.userAgent)
         fun brand(name: String, version: String) =
             UserAgentMetadata.BrandVersion.Builder().setBrand(name).setMajorVersion(version).setFullVersion("$version.0.0.0").build()
         return UserAgentMetadata.Builder()
@@ -159,7 +207,16 @@ class SpotifyWebView(
                     return true
                 }
             }
-            if (isInternalHost(uri.host)) return false
+            val login = UserAgents.isLoginHost(uri.host)
+            if (login || isInternalHost(uri.host)) {
+                // Switching between web player and login pages changes the
+                // user agent, which only applies to new requests.
+                if (request.isForMainFrame && request.method == "GET" && applyLoginMode(login)) {
+                    view.loadUrl(uri.toString())
+                    return true
+                }
+                return false
+            }
             if (!app.config.current.externalLinksInBrowser) return false
             callbacks.openExternal(uri)
             return true
@@ -167,11 +224,24 @@ class SpotifyWebView(
 
         override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
             DiagnosticsLog.log("page", "started $url${if (app.engine.safeMode) " (safe mode)" else ""}")
+            // Navigations that bypassed shouldOverrideUrlLoading (history, POST):
+            // fix the mode; the web player must not run with the device agent.
+            val host = Uri.parse(url).host
+            val login = UserAgents.isLoginHost(host)
+            if (applyLoginMode(login) && host == "open.spotify.com") {
+                view.post { view.reload() }
+                return
+            }
             callbacks.onPageStarted(url)
         }
 
         override fun onPageFinished(view: WebView, url: String) {
             DiagnosticsLog.log("page", "finished $url")
+            val hits = app.interceptor.hits
+            if (hits > 0) {
+                app.interceptor.hits = 0
+                DiagnosticsLog.log("patch", "$hits patched assets served from cache")
+            }
             CookieManager.getInstance().flush()
             callbacks.onPageFinished(url)
         }
