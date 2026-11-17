@@ -102,6 +102,7 @@ class SpotifyWebView(
         applyLoginMode(false)
         DiagnosticsLog.log("webview", "user agent: ${app.userAgent}")
         installServiceWorkerClient()
+        disableRequestedWithHeader()
 
         CookieManager.getInstance().apply {
             setAcceptCookie(true)
@@ -170,6 +171,31 @@ class SpotifyWebView(
                 }
             })
         }.onFailure { DiagnosticsLog.log("sw", "service worker client: $it") }
+    }
+
+    /**
+     * WebView adds "X-Requested-With: <package name>" to its requests, which
+     * Chrome does not send. Spotify's servers treat such clients differently:
+     * the web player registers and accepts play commands, but playback never
+     * starts (it does in Chrome on the same device and account). An empty
+     * allow-list stops the header for the page and its service workers.
+     */
+    // The public setter requires this feature check; only the constant is
+    // marked library-internal.
+    @SuppressLint("RestrictedApi")
+    private fun disableRequestedWithHeader() {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
+            DiagnosticsLog.log("webview", "X-Requested-With: cannot be disabled on this WebView")
+            return
+        }
+        runCatching {
+            WebSettingsCompat.setRequestedWithHeaderOriginAllowList(webView.settings, emptySet())
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.SERVICE_WORKER_BASIC_USAGE)) {
+                ServiceWorkerControllerCompat.getInstance().serviceWorkerWebSettings.requestedWithHeaderOriginAllowList = emptySet()
+            }
+            val left = WebSettingsCompat.getRequestedWithHeaderOriginAllowList(webView.settings)
+            DiagnosticsLog.log("webview", "X-Requested-With: disabled (allow-list ${left.size} origins)")
+        }.onFailure { DiagnosticsLog.log("webview", "X-Requested-With: $it") }
     }
 
     private fun desktopUserAgentMetadata(): UserAgentMetadata {
