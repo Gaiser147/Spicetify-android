@@ -91,4 +91,5 @@
     <string name="shortcut_settings">Spicetify-Einstellungen</string>
     <string name="test_playback">Wiedergabe testen</string>
     <string name="test_playback_running">Wiedergabe wird getestet…</string>
+    <string name="opt_native_dealer">Spotify-Connect-Verbindung über die App (Wiedergabe-Fix)</string>
 </resources>

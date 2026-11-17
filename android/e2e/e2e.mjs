@@ -6,7 +6,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { DESKTOP_UA, arg, devices, repo, startHarness, waitForStablePage } from "./harness.mjs";
+import { DESKTOP_UA, arg, chromium, devices, repo, startHarness, waitForStablePage } from "./harness.mjs";
 
 const out = resolve(arg("--out", join(repo, "build/e2e")));
 mkdirSync(out, { recursive: true });
@@ -379,6 +379,49 @@ const check = (name, ok, detail = "") => {
     check("No horizontal overflow on phone", overflow <= 1, `${overflow}px`);
   }
   writeFileSync(join(out, "phone-errors.log"), errors.join("\n"));
+  await browser.close();
+}
+
+// Dealer WebSocket relay (android/web/sockets.js) against a fake app: the
+// page-side socket must behave like a WebSocket for Spotify's dealer client.
+{
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  await page.addInitScript({
+    content: `window.__spicetifyAndroidNativeSockets = true;
+      window.__relay = [];
+      window.SpicetifyAndroid = { postMessage(raw) {
+        const { method, args } = JSON.parse(raw);
+        window.__relay.push(method);
+        const ev = (...a) => setTimeout(() => window.SpicetifyAndroidSockets.event(...a), 5);
+        if (method === "wsOpen") ev(args[0], "open");
+        if (method === "wsSend") ev(args[0], "message", "echo:" + args[1]);
+        if (method === "wsClose") ev(args[0], "close", String(args[1]), args[2]);
+      } };`,
+  });
+  await page.addInitScript({ path: join(repo, "android/web/sockets.js") });
+  await page.goto("about:blank");
+  const relay = await page.evaluate(
+    () =>
+      new Promise((resolve) => {
+        const seen = [];
+        const ws = new WebSocket("wss://gew4-dealer.g2.spotify.com/?access_token=x");
+        ws.onopen = () => {
+          seen.push(`open:${ws.readyState === WebSocket.OPEN}`);
+          ws.send('{"type":"ping"}');
+        };
+        ws.addEventListener("message", (e) => {
+          seen.push(e.data);
+          ws.close(1000, "done");
+        });
+        ws.onclose = (e) => resolve({ seen: [...seen, `close:${e.code}:${ws.readyState}`], relay: window.__relay, other: typeof WebSocket.OPEN });
+      }),
+  );
+  check(
+    "Dealer WebSocket relayed through the app",
+    relay.seen.join("|") === 'open:true|echo:{"type":"ping"}|close:1000:3' && relay.relay.join(",") === "wsOpen,wsSend,wsClose",
+    JSON.stringify(relay),
+  );
   await browser.close();
 }
 

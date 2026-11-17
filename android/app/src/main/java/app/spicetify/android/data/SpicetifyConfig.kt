@@ -46,6 +46,8 @@ data class SpicetifyConfig(
     val externalLinksInBrowser: Boolean = true,
     /** Runs the plain web player without any Spicetify changes (troubleshooting). */
     val safeMode: Boolean = false,
+    /** Spotify's dealer (Connect) WebSocket through the app instead of the WebView. */
+    val nativeDealer: Boolean = true,
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("currentTheme", currentTheme)
@@ -71,6 +73,7 @@ data class SpicetifyConfig(
         put("webViewDebugging", webViewDebugging)
         put("externalLinksInBrowser", externalLinksInBrowser)
         put("safeMode", safeMode)
+        put("nativeDealer", nativeDealer)
     }
 
     companion object {
@@ -107,6 +110,7 @@ data class SpicetifyConfig(
                 webViewDebugging = json.optBoolean("webViewDebugging", d.webViewDebugging),
                 externalLinksInBrowser = json.optBoolean("externalLinksInBrowser", d.externalLinksInBrowser),
                 safeMode = json.optBoolean("safeMode", d.safeMode),
+                nativeDealer = json.optBoolean("nativeDealer", d.nativeDealer),
             )
         }
 

@@ -215,6 +215,8 @@ class MainActivity : ComponentActivity(), SpotifyWebView.Callbacks {
 
     override fun onStop() {
         super.onStop()
+        // Keep the login: cookies are only persisted on flush.
+        android.webkit.CookieManager.getInstance().flush()
         controllerFuture?.let { MediaController.releaseFuture(it) }
         controllerFuture = null
     }
@@ -250,6 +252,7 @@ class MainActivity : ComponentActivity(), SpotifyWebView.Callbacks {
     // --- SpotifyWebView.Callbacks ------------------------------------------
 
     override fun onPageStarted(url: String) {
+        bridge.closeSockets()
         if (Uri.parse(url).host != "open.spotify.com") return
         playerReady = false
         root.removeCallbacks(watchdog)

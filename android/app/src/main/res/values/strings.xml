@@ -93,4 +93,5 @@
     <string name="shortcut_settings">Spicetify settings</string>
     <string name="test_playback">Test playback</string>
     <string name="test_playback_running">Testing playback…</string>
+    <string name="opt_native_dealer">Spotify Connect connection through the app (playback fix)</string>
 </resources>
