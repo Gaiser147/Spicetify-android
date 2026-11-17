@@ -341,8 +341,11 @@ class SpotifyWebView(
 
         override fun onConsoleMessage(message: ConsoleMessage): Boolean {
             val level = message.messageLevel()
+            val text = message.message()
+            // The wrapper's per-API resolve tips would push everything else out of the log.
+            if (text.contains("Resolved PlatformAPI from Registry")) return true
             if (level == ConsoleMessage.MessageLevel.ERROR || level == ConsoleMessage.MessageLevel.WARNING ||
-                message.message().contains("spicetify", true)
+                text.contains("spicetify", true)
             ) {
                 val source = message.sourceId().substringAfterLast('/')
                 DiagnosticsLog.log("console", "${level.name.lowercase()}: ${message.message()} ($source:${message.lineNumber()})")

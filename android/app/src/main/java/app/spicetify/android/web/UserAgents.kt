@@ -30,4 +30,19 @@ object UserAgents {
 
     /** Hosts of the login flow (Spotify accounts and the login providers). */
     fun isLoginHost(host: String?): Boolean = host != null && host in LOGIN_HOSTS
+
+    /**
+     * Request headers copied from a WebView request to our own fetch. The
+     * WebView's "X-Requested-With: <package name>" marks embedded WebViews;
+     * Chrome does not send it, so it is never forwarded.
+     */
+    fun isForwardedHeader(name: String, vararg skip: String): Boolean =
+        !name.equals("X-Requested-With", true) && skip.none { it.equals(name, true) }
+
+    /** Summary of request headers relevant to how Spotify sees the client. */
+    fun describeHeaders(headers: Map<String, String>): String {
+        fun value(name: String) = headers.entries.firstOrNull { it.key.equals(name, true) }?.value
+        return listOf("X-Requested-With", "Sec-CH-UA-Platform", "Sec-CH-UA-Mobile", "Sec-CH-UA", "User-Agent")
+            .joinToString(", ") { "${it.lowercase()}=${value(it) ?: "-"}" }
+    }
 }

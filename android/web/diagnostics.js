@@ -502,6 +502,7 @@
   const testPlayback = async () => {
     watch(10_000);
     log(`test: environment ${JSON.stringify(environment())}`);
+    void echoHeaders();
     const api = platform()?.PlayerAPI;
     if (!api) {
       log("test: PlayerAPI unavailable (safe mode or page not ready)");
@@ -520,6 +521,13 @@
   };
 
   log(`environment ${JSON.stringify(environment())}`);
+  // Headers the WebView attaches (the app answers /__spicetify/echo and logs them).
+  const echoHeaders = () =>
+    fetch("/__spicetify/echo", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((j) => log(`request headers: ${j.headers}`))
+      .catch((e) => log(`request headers unavailable: ${errText(e)}`));
+  setTimeout(echoHeaders, 1000);
   // Formats the web player (and its ads) use; reported once per page.
   setTimeout(async () => {
     const types = [
