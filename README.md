@@ -21,6 +21,10 @@ Supports Windows, MacOS and Linux.
 - Inject Custom Apps
 - Make yourself in control of the Spotify client
 
+### Android
+
+[`android/`](android/README.md) contains **Spicetify for Android**, an app that runs the Spotify web player with Spicetify's patches, extensions, themes, snippets, custom apps and the Marketplace. It adds a phone layout and integrates with Android: background playback, media notification, lock screen and Bluetooth controls.
+
 ### Links
 
 - [Installation](https://spicetify.app/docs/getting-started)

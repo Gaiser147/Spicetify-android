@@ -368,12 +368,7 @@ func RefreshApps(list ...string) {
 			}
 		}
 
-		jsTemplate := fmt.Sprintf(
-			`((e)=>{const t=e.rspackChunk||e.rspackChunkclient_web||e.webpackChunkclient_web||[];return e.rspackChunk=e.rspackChunk||t,e.rspackChunkclient_web=e.rspackChunkclient_web||t,e.webpackChunkclient_web=e.webpackChunkclient_web||t,t})("undefined"!=typeof self?self:globalThis).push([["%s"],{"%s":(e,t,n)=>{
-"use strict";n.r(t),n.d(t,{default:()=>render});
-%s
-}}]);`,
-			appName, appName, jsFileContent)
+		jsTemplate := apply.BuildCustomAppChunk(app, string(jsFileContent))
 
 		os.WriteFile(
 			filepath.Join(appDestPath, "xpui", appName+".js"),

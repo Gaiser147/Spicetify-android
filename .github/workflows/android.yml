@@ -1,0 +1,140 @@
+name: Android
+
+on:
+  pull_request:
+    paths:
+      - "android/**"
+      - "src/**"
+      - "jsHelper/**"
+      - "Extensions/**"
+      - "CustomApps/**"
+      - "Themes/**"
+      - "css-map.json"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/android.yml"
+  push:
+    branches:
+      - "main"
+    paths:
+      - "android/**"
+      - "src/**"
+      - "jsHelper/**"
+      - "Extensions/**"
+      - "CustomApps/**"
+      - "Themes/**"
+      - "css-map.json"
+      - ".github/workflows/android.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    name: Build APK
+    runs-on: ubuntu-latest
+    env:
+      NDK_VERSION: "27.2.12479018"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: "go.mod"
+
+      - name: Test patch engine
+        # The live test downloads the current web player and checks that the
+        # key patches still apply.
+        run: go test ./src/patcher/...
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # The GitHub runner image ships the Android SDK and command-line tools.
+      - name: Install NDK and gomobile
+        run: |
+          SDKMANAGER="$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager | sort -V | tail -1)"
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+          "$SDKMANAGER" --install "ndk;${NDK_VERSION}" "platforms;android-36" "build-tools;36.0.0"
+          cd android/engine
+          go install golang.org/x/mobile/cmd/gomobile golang.org/x/mobile/cmd/gobind
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Build and unit test
+        working-directory: android
+        run: ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease
+
+      - name: Upload APKs
+        uses: actions/upload-artifact@v5
+        with:
+          name: spicetify-android
+          path: |
+            android/app/build/outputs/apk/debug/*.apk
+            android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+
+  e2e:
+    name: Web layer end-to-end
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: |
+          pnpm install --frozen-lockfile
+          npx --yes playwright@1 install --with-deps chromium
+          npm install --no-save --prefix android/e2e playwright@1
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: "go.mod"
+
+      - name: Build wrapper
+        run: pnpm build:wrapper
+
+      - name: Run end-to-end check
+        run: |
+          curl -sSL -o marketplace.zip https://github.com/spicetify/marketplace/releases/latest/download/marketplace.zip
+          unzip -q marketplace.zip -d marketplace
+          node android/e2e/e2e.mjs --marketplace marketplace/marketplace-dist
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: e2e-screenshots
+          path: |
+            build/e2e/*.png
+            build/e2e/*.log
+            build/e2e/*.json
+          if-no-files-found: ignore

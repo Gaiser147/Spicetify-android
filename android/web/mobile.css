@@ -1,0 +1,226 @@
+/* Spicetify Android: mobile layout (active when <html> has .spicetify-android-mobile).
+ * Elements are tagged by mobile.js with stable sa-* classes. */
+
+html.spicetify-android-mobile {
+  --sa-nav-height: 56px;
+  --sa-bar-height: 72px;
+  --sa-gap: 6px;
+  --sa-safe-top: env(safe-area-inset-top, 0px);
+  --sa-safe-bottom: env(safe-area-inset-bottom, 0px);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+html.spicetify-android-mobile,
+html.spicetify-android-mobile body,
+html.spicetify-android-mobile #main,
+html.spicetify-android-mobile .sa-root {
+  min-width: 0 !important;
+  width: 100% !important;
+  overflow-x: hidden !important;
+}
+
+/* Single column grid. */
+html.spicetify-android-mobile .sa-grid {
+  grid-template-areas:
+    "top-banner"
+    "global-nav"
+    "main-view"
+    "now-playing-bar" !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  grid-template-rows: auto var(--sa-nav-height) minmax(0, 1fr) auto !important;
+  padding-top: var(--sa-safe-top) !important;
+  padding-bottom: var(--sa-safe-bottom) !important;
+  column-gap: 0 !important;
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+html.spicetify-android-mobile .sa-area-main-view {
+  grid-area: main-view !important;
+  min-width: 0 !important;
+  width: auto !important;
+  margin: 0 var(--sa-gap) !important;
+}
+
+/* Top navigation. */
+html.spicetify-android-mobile .sa-area-global-nav,
+html.spicetify-android-mobile #global-nav-bar {
+  height: var(--sa-nav-height) !important;
+  min-width: 0 !important;
+  padding-inline: 4px !important;
+  gap: 4px !important;
+  overflow: hidden;
+}
+html.spicetify-android-mobile #global-nav-bar > * {
+  min-width: 0 !important;
+  flex-shrink: 1 !important;
+}
+/* Spotify logo is redundant inside the app. */
+html.spicetify-android-mobile #global-nav-bar > div:has(> a[href="/"]:only-child svg) {
+  display: none !important;
+}
+/* "Install app" and similar promo links. */
+html.spicetify-android-mobile #global-nav-bar a[href*="/download"],
+html.spicetify-android-mobile #global-nav-bar a[href*="premium"] {
+  display: none !important;
+}
+
+#spicetify-android-drawer-toggle {
+  display: none;
+}
+html.spicetify-android-mobile #spicetify-android-drawer-toggle {
+  display: flex;
+  flex: 0 0 auto !important;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin-inline: 2px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--spice-text, #fff);
+  cursor: pointer;
+}
+html.spicetify-android-mobile #spicetify-android-drawer-toggle:active {
+  background: rgba(var(--spice-rgb-text, 255, 255, 255), 0.1);
+}
+
+/* Library sidebar as drawer. */
+html.spicetify-android-mobile .sa-area-left-sidebar {
+  position: fixed !important;
+  z-index: 60 !important;
+  top: calc(var(--sa-safe-top) + var(--sa-nav-height)) !important;
+  bottom: calc(var(--sa-safe-bottom) + var(--sa-bar-height) + 2 * var(--sa-gap)) !important;
+  left: 0 !important;
+  width: min(86vw, 360px) !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  padding: 0 var(--sa-gap) !important;
+  transform: translateX(-105%);
+  transition: transform 0.22s ease-out;
+  will-change: transform;
+}
+html.spicetify-android-mobile .sa-area-left-sidebar > * {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+}
+html.spicetify-android-mobile body.spicetify-android-drawer-open .sa-area-left-sidebar {
+  transform: none;
+  box-shadow: 0 0 32px rgba(0, 0, 0, 0.6);
+}
+html.spicetify-android-mobile .sa-area-left-sidebar .LayoutResizer__resize-bar {
+  display: none !important;
+}
+
+/* Right sidebar (now playing view, queue, lyrics, devices) as full screen panel. */
+html.spicetify-android-mobile .sa-area-right-sidebar {
+  position: fixed !important;
+  z-index: 55 !important;
+  inset: calc(var(--sa-safe-top) + var(--sa-nav-height)) 0 calc(var(--sa-safe-bottom) + var(--sa-bar-height) + 2 * var(--sa-gap)) 0 !important;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  padding: 0 var(--sa-gap) !important;
+  transform: translateY(110%);
+  transition: transform 0.25s ease-out;
+}
+html.spicetify-android-mobile .sa-area-right-sidebar > *,
+html.spicetify-android-mobile .sa-area-right-sidebar > * > * {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+}
+html.spicetify-android-mobile body.spicetify-android-panel-open .sa-area-right-sidebar {
+  transform: none;
+}
+html.spicetify-android-mobile .sa-area-right-sidebar .LayoutResizer__resize-bar {
+  display: none !important;
+}
+
+#spicetify-android-scrim {
+  display: none;
+}
+html.spicetify-android-mobile body.spicetify-android-drawer-open #spicetify-android-scrim {
+  display: block;
+  position: fixed;
+  /* Starts below the top bar so the drawer toggle stays tappable. */
+  inset: calc(var(--sa-safe-top) + var(--sa-nav-height)) 0 0 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+/* Compact now playing bar: track info + play controls, extras hidden. */
+html.spicetify-android-mobile .sa-area-now-playing-bar {
+  grid-area: now-playing-bar !important;
+  min-width: 0 !important;
+}
+html.spicetify-android-mobile .sa-nowplaying {
+  min-width: 0 !important;
+  height: auto !important;
+}
+html.spicetify-android-mobile .sa-nowplaying-row {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  grid-template-rows: auto auto;
+  align-items: center;
+  min-width: 0 !important;
+  height: auto !important;
+  min-height: var(--sa-bar-height);
+  padding: 4px 8px !important;
+  gap: 0 8px;
+}
+html.spicetify-android-mobile .sa-np-left {
+  grid-column: 1;
+  grid-row: 1;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  cursor: pointer;
+}
+html.spicetify-android-mobile .sa-np-center {
+  display: contents !important;
+}
+/* Player controls (first child of the center column) next to the track info,
+ * progress bar (last child) spans the full width below. */
+html.spicetify-android-mobile .sa-np-center > :first-child {
+  grid-column: 2;
+  grid-row: 1;
+  width: auto !important;
+  min-width: 0 !important;
+}
+html.spicetify-android-mobile .sa-np-center > :last-child:not(:first-child) {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  width: 100% !important;
+  max-width: none !important;
+}
+html.spicetify-android-mobile .sa-np-right {
+  display: none !important;
+}
+
+/* Touch friendliness. */
+html.spicetify-android-mobile button,
+html.spicetify-android-mobile [role="button"] {
+  touch-action: manipulation;
+}
+html.spicetify-android-mobile ::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+}
+/* Hover-only controls (card play buttons, row actions) stay visible on touch. */
+@media (hover: none) {
+  html.spicetify-android-mobile [data-encore-id="buttonPrimary"] {
+    opacity: 1;
+  }
+}
+
+/* Main view content tweaks. */
+html.spicetify-android-mobile .main-view-container {
+  --content-spacing: 12px !important;
+}
+html.spicetify-android-mobile .contentSpacing {
+  padding-inline: 12px !important;
+}

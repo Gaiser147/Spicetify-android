@@ -18,8 +18,8 @@ import { waitFor } from "./shared/async.js";
     clearInterval(interval);
   }, 10);
 
-  Spicetify.Player.origin._events.addListener("update", ({ data: playerEventData }) => {
-    playerState.current = playerEventData.item ? playerEventData : null;
+  const onUpdate = (playerEventData) => {
+    playerState.current = playerEventData?.item ? playerEventData : null;
     Spicetify.Player.data = playerState.current;
 
     if (playerState.cache?.item?.uri !== playerState.current?.item?.uri) {
@@ -35,7 +35,17 @@ import { waitFor } from "./shared/async.js";
     }
 
     playerState.cache = playerState.current;
-  });
+  };
+
+  Spicetify.Player.origin._events?.addListener?.("update", ({ data }) => onUpdate(data));
+
+  // The web player's event emitter does not always emit "update"; poll the
+  // state as a fallback so songchange/onplaypause still fire.
+  setInterval(() => {
+    const state = Spicetify.Player.origin?._state;
+    if (!state) return;
+    if (state.item?.uri !== playerState.cache?.item?.uri || state.isPaused !== playerState.cache?.isPaused) onUpdate(state);
+  }, 500);
 
   (function waitProductStateAPI() {
     if (!Spicetify.Platform?.UserAPI) {
