@@ -66,9 +66,11 @@ import app.spicetify.android.data.LayoutMode
 import app.spicetify.android.data.Snippet
 import app.spicetify.android.data.SpicetifyConfig
 import app.spicetify.android.diagnostics.DiagnosticsLog
+import app.spicetify.android.playback.PlaybackController
 import app.spicetify.android.spicengine.Spicengine
 import app.spicetify.android.spicetify
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -541,11 +543,36 @@ fun SettingsScreen(modifier: Modifier, snackbar: SnackbarHostState, openDiagnost
 private fun DiagnosticsDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
     var report by remember { mutableStateOf(DiagnosticsLog.report(context)) }
+    var testing by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.diagnostics)) },
         text = {
             Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                // Calls the web player's PlayerAPI directly and logs the
+                // result, requests and state (android/web/diagnostics.js).
+                OutlinedButton(
+                    enabled = !testing,
+                    onClick = {
+                        val sink = PlaybackController.sink
+                        if (sink == null) {
+                            DiagnosticsLog.log("player", "test: player not running")
+                            report = DiagnosticsLog.report(context)
+                            return@OutlinedButton
+                        }
+                        DiagnosticsLog.log("player", "test: started")
+                        sink.send("testPlayback", null)
+                        testing = true
+                        scope.launch {
+                            repeat(3) {
+                                delay(4_000)
+                                report = DiagnosticsLog.report(context)
+                            }
+                            testing = false
+                        }
+                    },
+                ) { Text(stringResource(if (testing) R.string.test_playback_running else R.string.test_playback)) }
                 Text(report, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
             }
         },

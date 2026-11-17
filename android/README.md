@@ -46,7 +46,7 @@ Wird die App auf dem Handy beendet (aus den letzten Apps gewischt), endet auch d
 - **Der Player startet nicht oder bleibt schwarz:** Nach 30 Sekunden erscheint unten ein Balken mit „Neu laden“, „Abgesicherter Modus“ und „Diagnose“.
 - **Abgesicherter Modus:** Spotify läuft ganz ohne Spicetify. Funktioniert der Player dort, liegt das Problem bei Spicetify oder einer Erweiterung, sonst bei der WebView bzw. Widevine.
 - **Diagnose:** Einstellungen → Wartung → Diagnose zeigt das Protokoll (Fehler, Ladevorgänge, Abstürze) mit Geräte- und WebView-Version. Über „Teilen“ kannst du es einem Fehlerbericht beilegen.
-- **Wiedergabe startet nicht:** Tippe einmal auf Play und öffne danach die Diagnose. Die Einträge mit `[player]` zeigen, ob Widevine verfügbar ist, welches Wiedergabegerät aktiv ist und was der Player nach dem Tippen meldet.
+- **Wiedergabe startet nicht:** Tippe einmal auf Play, öffne danach die Diagnose und drücke „Wiedergabe testen“. Die Einträge mit `[player]` und `[player-net]` zeigen Widevine, Wiedergabegerät, Sperrgründe des Players, Abo-Status und die Spotify-Anfragen nach dem Tippen. Die Diagnose läuft auch im abgesicherten Modus.
 - **Einstellungen ohne Player:** Langes Drücken auf das App-Icon → „Spicetify-Einstellungen“.
 
 ### Einschränkungen
@@ -105,7 +105,7 @@ If the player does not come up within 30 seconds, a bar offers Reload, Safe mode
 
 - **Safe mode** runs Spotify without Spicetify.
 - **Diagnostics** (also under Settings → Maintenance) contains the player log with device and WebView details, ready to share.
-- **Playback does not start:** tap Play once, then open Diagnostics. The `[player]` entries show whether Widevine is available, which playback device is active and what the player reported after the tap.
+- **Playback does not start:** tap Play once, open Diagnostics and press "Test playback". The `[player]` and `[player-net]` entries show Widevine, the playback device, the player's restrictions, the account's product state and Spotify's requests after the tap. Diagnostics also run in safe mode.
 - Long-press the app icon to open the settings without the player.
 
 ### Limitations

@@ -89,4 +89,6 @@
     <string name="clear">Leeren</string>
     <string name="close">Schließen</string>
     <string name="shortcut_settings">Spicetify-Einstellungen</string>
+    <string name="test_playback">Wiedergabe testen</string>
+    <string name="test_playback_running">Wiedergabe wird getestet…</string>
 </resources>

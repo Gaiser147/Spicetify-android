@@ -91,4 +91,6 @@
     <string name="clear">Clear</string>
     <string name="close">Close</string>
     <string name="shortcut_settings">Spicetify settings</string>
+    <string name="test_playback">Test playback</string>
+    <string name="test_playback_running">Testing playback…</string>
 </resources>

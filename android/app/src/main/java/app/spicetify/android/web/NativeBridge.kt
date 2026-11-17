@@ -91,8 +91,11 @@ class NativeBridge(
 
     /** Runs SpicetifyAndroidBridge.command(name, arg) in the page. */
     fun command(name: String, argument: String? = null) {
-        val js = "window.SpicetifyAndroidBridge&&SpicetifyAndroidBridge.command(${JSONObject.quote(name)}," +
-            "${if (argument == null) "undefined" else JSONObject.quote(argument)})"
+        val quoted = JSONObject.quote(name)
+        // Safe mode has no bridge.js; the playback test still reports the environment.
+        val js = "window.SpicetifyAndroidBridge?SpicetifyAndroidBridge.command($quoted," +
+            "${if (argument == null) "undefined" else JSONObject.quote(argument)}):" +
+            "($quoted==='testPlayback'&&window.SpicetifyAndroidDiagnostics&&SpicetifyAndroidDiagnostics.testPlayback())"
         main.post { webView.evaluateJavascript(js, null) }
     }
 

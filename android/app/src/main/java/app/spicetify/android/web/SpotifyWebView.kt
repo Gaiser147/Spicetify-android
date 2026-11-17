@@ -119,8 +119,8 @@ class SpotifyWebView(
     /** (Re)registers the document start script; returns true if it changed. */
     fun refreshStartScript(): Boolean {
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return false
-        // Safe mode: no Spicetify at all.
-        val source = if (app.engine.safeMode) "" else app.engine.documentStartScript()
+        // Safe mode: no Spicetify, only the (observing) playback diagnostics.
+        val source = if (app.engine.safeMode) app.engine.diagnosticsScript() else app.engine.documentStartScript()
         if (source == startScriptSource) return false
         startScript?.remove()
         startScript = if (source.isEmpty()) null else WebViewCompat.addDocumentStartJavaScript(webView, source, setOf(ORIGIN))
