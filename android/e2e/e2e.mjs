@@ -235,12 +235,14 @@ const check = (name, ok, detail = "") => {
       websocket: all.some((m) => m.includes("ws connecting dealer.spotify.com")),
       test: all.some((m) => /test: (\w+\(\) resolved|player call rejected)/.test(m)),
       environment: all.some((m) => m.startsWith("[player] environment")),
-      sample: all.filter((m) => /tap|test:|ws /.test(m)).map((m) => m.slice(0, 160)),
+      // Logged out the web player may not create its local player.
+      harmony: all.some((m) => m.startsWith("[player] harmony hooked")) || !window.Spicetify?.Platform?.PlayerAPI?._harmony,
+      sample: all.filter((m) => /tap|test:|ws |harmony/.test(m)).map((m) => m.slice(0, 200)),
     };
   });
   check(
     "Playback diagnostics: tap, requests, WebSocket and playback test logged",
-    diag.tap && diag.request && diag.websocket && diag.test && diag.environment,
+    diag.tap && diag.request && diag.websocket && diag.test && diag.environment && diag.harmony,
     JSON.stringify(diag),
   );
 

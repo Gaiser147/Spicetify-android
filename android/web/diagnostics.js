@@ -38,6 +38,7 @@
   // seconds after a play tap or a playback test) every request is logged.
   let watchUntil = 0;
   let watchMessages = 0;
+  let dealerMessages = 0;
   const watch = (ms) => {
     watchUntil = Date.now() + ms;
     watchMessages = 0;
@@ -53,9 +54,11 @@
     }
   };
   const short = (u) => `${u.host}${u.pathname}`.slice(0, 140);
+  // Requests of the playback stack are always logged.
+  const PLAYBACK_PATH = /track-playback|connect-state\/v1\/devices|storage-resolve|manifests|widevine-license|playplay|audio-attributes/;
   const net = (method, u, status, started) => {
     const ok = typeof status === "number" && status >= 200 && status < 400;
-    if (ok && !watching()) return;
+    if (ok && !watching() && !PLAYBACK_PATH.test(u.pathname)) return;
     log(`${method} ${short(u)} -> ${status} (${Math.round(performance.now() - started)} ms)`, "player-net");
   };
 
@@ -83,6 +86,12 @@
                 .then((t) => log(`remote config ${res.status} (property set ${set}): ${t.slice(0, 300)}`, "player-net"))
                 .catch(() => {});
             }
+          } else if (!res.ok && /track-playback|connect-state/.test(u.pathname)) {
+            res
+              .clone()
+              .text()
+              .then((t) => log(`${short(u)} ${res.status}: ${t.slice(0, 300)}`, "player-net"))
+              .catch(() => {});
           }
         },
         (e) => net(method, u, `failed (${errText(e)})`, started),
@@ -129,12 +138,15 @@
         this.addEventListener("error", () => log(`ws error ${name}`, "player-net"));
         this.addEventListener("close", (e) => log(`ws closed ${name} code=${e.code} clean=${e.wasClean} ${e.reason || ""}`, "player-net"));
         this.addEventListener("message", (e) => {
-          if (!watching() || watchMessages++ > 15) return;
           let what = typeof e.data === "string" ? "text" : "binary";
           try {
             const m = JSON.parse(e.data);
             what = [m.type, m.uri, m.message_ident, m.key].filter(Boolean).join(" ") || "json";
           } catch {}
+          // The first messages of a connection (connection id, cluster) always,
+          // later ones only while watching.
+          if (what === "pong" && !watching()) return;
+          if (dealerMessages++ >= 30 && (!watching() || watchMessages++ > 15)) return;
           log(`ws message ${name}: ${what.slice(0, 160)}`, "player-net");
         });
       }
@@ -246,7 +258,11 @@
     if (!obj || typeof obj !== "object") return obj ?? null;
     const out = {};
     for (const key of Object.keys(obj).slice(0, 60)) {
-      const v = obj[key];
+      // Never copy credentials into a log the user shares.
+      if (/token|secret|password|auth|cookie|session|key$/i.test(key)) continue;
+      const desc = Object.getOwnPropertyDescriptor(obj, key);
+      if (!desc || !("value" in desc)) continue;
+      const v = desc.value;
       if (v === null || ["string", "number", "boolean"].includes(typeof v)) out[key] = typeof v === "string" ? v.slice(0, 60) : v;
       else if (Array.isArray(v) && v.length && v.every((x) => typeof x === "string")) out[key] = v.slice(0, 5);
       if (Object.keys(out).length >= limit) break;
@@ -276,6 +292,90 @@
       media: elements.map((m) => `${m.tagName.toLowerCase()} paused=${m.paused} ready=${m.readyState} t=${Math.round(m.currentTime)}`),
     };
   };
+  // The local player ("harmony") reports registration and playback failures
+  // as events; Spotify's UI does not show most of them.
+  const HARMONY_EVENTS = [
+    "error",
+    "authentication_error",
+    "autoplay_failed",
+    "connection_error",
+    "device_deactivated",
+    "local_player_disabled",
+    "local_player_enabled",
+    "logged_out",
+    "max_list_errors_reached",
+    "max_subscriptions_reached",
+    "playback_capped",
+    "player_initialization_done",
+    "player_initialization_failed",
+    "service_registration_error",
+    "stalled",
+    "stopped_on_background",
+    "unrecoverable_failure",
+    "registered",
+    "registration_aborted",
+    "deregistered",
+  ];
+  const describeEvent = (e) => {
+    const d = e?.data ?? e;
+    const err = d?.error ?? d?.reason_error ?? (d instanceof Error ? d : null);
+    const out = {
+      code: err?.code ?? d?.code,
+      name: err?.name,
+      message: err?.message ?? d?.message,
+      status: err?.status ?? d?.status,
+      source: d?.source,
+      reason: d?.reason,
+      fatal: err?.fatal,
+      deviceId: d?.deviceId,
+    };
+    for (const k of Object.keys(out)) if (out[k] === undefined) delete out[k];
+    return JSON.stringify(out).slice(0, 400);
+  };
+  let hookTries = 0;
+  const hookPlayer = () => {
+    const api = platform()?.PlayerAPI;
+    const harmony = api?._harmony;
+    if (!harmony || typeof harmony.addListener !== "function") {
+      if (hookTries++ < 240) setTimeout(hookPlayer, 500);
+      return;
+    }
+    let hooked = 0;
+    for (const name of HARMONY_EVENTS) {
+      try {
+        harmony.addListener(name, (e) => log(`harmony ${name}: ${describeEvent(e)}`));
+        hooked++;
+      } catch {}
+    }
+    try {
+      api.getEvents?.()?.addListener?.("error", (e) => log(`player error: ${describeEvent(e)}`));
+    } catch {}
+    log(`harmony hooked (${hooked} events) ${JSON.stringify(playbackInternals())}`);
+  };
+  /** Flat state of the playback objects (registration, device id), found below PlayerAPI._harmony. */
+  const playbackInternals = () => {
+    const root = platform()?.PlayerAPI?._harmony;
+    if (!root || typeof root !== "object") return null;
+    const out = {};
+    const seen = new WeakSet();
+    const queue = [[root, "harmony", 0]];
+    let visited = 0;
+    while (queue.length && visited < 400) {
+      const [obj, path, depth] = queue.shift();
+      if (!obj || typeof obj !== "object" || seen.has(obj)) continue;
+      seen.add(obj);
+      visited++;
+      if (["_registered", "_deviceId", "_connectionId", "_isRegistered"].some((k) => Object.hasOwn(obj, k))) out[path] = pick(obj, 14);
+      if (depth >= 3) continue;
+      for (const key of Object.keys(obj).slice(0, 60)) {
+        const desc = Object.getOwnPropertyDescriptor(obj, key);
+        const v = desc && "value" in desc ? desc.value : undefined;
+        if (v && typeof v === "object" && !Array.isArray(v) && !(v instanceof Node)) queue.push([v, `${path}.${key}`, depth + 1]);
+      }
+    }
+    return out;
+  };
+
   /** Everything that may explain why playback does not start. */
   const details = async () => {
     const P = platform();
@@ -319,6 +419,7 @@
       devices,
       coordinator: pick(P?.StandalonePlayerCoordinatorAPI),
       storage,
+      internals: playbackInternals(),
     };
   };
   const environment = () => ({
@@ -369,5 +470,6 @@
   };
 
   log(`environment ${JSON.stringify(environment())}`);
+  hookPlayer();
   window.SpicetifyAndroidDiagnostics = { log, summary, details, environment, testPlayback, watch };
 })();
