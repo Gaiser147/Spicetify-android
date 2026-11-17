@@ -73,4 +73,20 @@
     <string name="auto_open_app">Öffne Spicetify auf dem Handy, um deine Bibliothek zu durchsuchen.</string>
     <string name="auto_error">Konnte nicht geladen werden. Versuch es erneut.</string>
     <string name="auto_empty">Hier ist noch nichts.</string>
+
+    <string name="recovery_stuck">Der Player ist nicht gestartet. Du kannst neu laden, den abgesicherten Modus (Spotify ohne Spicetify) ausprobieren oder die Diagnose ansehen.</string>
+    <string name="recovery_reload">Neu laden</string>
+    <string name="recovery_safe_mode">Abgesicherter Modus</string>
+    <string name="recovery_diagnostics">Diagnose</string>
+    <string name="safe_mode_active">Abgesicherter Modus: Spicetify ist ausgeschaltet.</string>
+    <string name="safe_mode_exit">Beenden</string>
+    <string name="diagnostics">Diagnose</string>
+    <string name="diagnostics_desc">Protokoll des Players (Fehler, Ladevorgänge). Teile es, wenn du ein Problem meldest.</string>
+    <string name="opt_safe_mode">Abgesicherter Modus</string>
+    <string name="opt_safe_mode_desc">Startet den Spotify-Web-Player ohne Spicetify, um zu prüfen, ob ein Problem von Spicetify kommt.</string>
+    <string name="share">Teilen</string>
+    <string name="copy">Kopieren</string>
+    <string name="clear">Leeren</string>
+    <string name="close">Schließen</string>
+    <string name="shortcut_settings">Spicetify-Einstellungen</string>
 </resources>

@@ -44,6 +44,8 @@ data class SpicetifyConfig(
     val layoutMode: LayoutMode = LayoutMode.AUTO,
     val webViewDebugging: Boolean = false,
     val externalLinksInBrowser: Boolean = true,
+    /** Runs the plain web player without any Spicetify changes (troubleshooting). */
+    val safeMode: Boolean = false,
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("currentTheme", currentTheme)
@@ -68,6 +70,7 @@ data class SpicetifyConfig(
         put("layoutMode", layoutMode.value)
         put("webViewDebugging", webViewDebugging)
         put("externalLinksInBrowser", externalLinksInBrowser)
+        put("safeMode", safeMode)
     }
 
     companion object {
@@ -103,6 +106,7 @@ data class SpicetifyConfig(
                 layoutMode = LayoutMode.from(json.optString("layoutMode")),
                 webViewDebugging = json.optBoolean("webViewDebugging", d.webViewDebugging),
                 externalLinksInBrowser = json.optBoolean("externalLinksInBrowser", d.externalLinksInBrowser),
+                safeMode = json.optBoolean("safeMode", d.safeMode),
             )
         }
 

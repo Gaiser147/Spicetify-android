@@ -9,6 +9,7 @@ import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
+import app.spicetify.android.diagnostics.DiagnosticsLog
 import app.spicetify.android.playback.PlaybackController
 import org.json.JSONArray
 import org.json.JSONObject
@@ -26,6 +27,7 @@ class NativeBridge(
     private val webView: WebView,
     private val onOpenManager: () -> Unit,
     private val onNavigation: (String) -> Unit,
+    private val onBridgeReady: () -> Unit = {},
 ) {
     private val main = Handler(Looper.getMainLooper())
     private val nextRequestId = AtomicInteger(1)
@@ -78,7 +80,10 @@ class NativeBridge(
             "onPlaybackState" -> PlaybackController.onStateJson(args.optString(0, "{}"))
             "onNavigation" -> main.post { onNavigation(args.optString(0, "/")) }
             "openManager" -> main.post(onOpenManager)
-            "onBridgeReady" -> Log.i(TAG, "bridge ready ${args.optString(0)}")
+            "onBridgeReady" -> {
+                DiagnosticsLog.log("bridge", "ready ${args.optString(0)}")
+                main.post(onBridgeReady)
+            }
             "onResult" -> pending.remove(args.optInt(0))?.invoke(args.optString(1, "{}"))
         }
     }

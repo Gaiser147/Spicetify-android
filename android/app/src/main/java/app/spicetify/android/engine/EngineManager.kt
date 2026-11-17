@@ -29,6 +29,9 @@ class EngineManager(
     /** Changes whenever patch output may change (engine version + config). */
     val cacheKey: String get() = current().key
 
+    /** Safe mode: the web player runs without any Spicetify changes. */
+    val safeMode: Boolean get() = configRepository.current.safeMode
+
     private fun current(): State {
         val config = configRepository.current
         state?.let { if (it.config == config) return it }
@@ -38,7 +41,7 @@ class EngineManager(
             // Desktop and web player share their class name hashes, so css-map.json applies.
             val cssMap = files.readText("css-map.json") ?: ""
             val engine = Spicengine.newEngine(engineConfig, cssMap)
-            val key = sha1(Spicengine.version() + "\n" + engineConfig + "\n" + cssMap.length)
+            val key = sha1(Spicengine.version() + "\n" + engineConfig + "\n" + cssMap.length + "\n" + config.safeMode)
             return State(config, engine, key).also { state = it }
         }
     }

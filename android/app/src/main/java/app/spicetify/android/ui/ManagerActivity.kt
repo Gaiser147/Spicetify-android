@@ -43,11 +43,16 @@ class ManagerActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        val diagnostics = intent.getBooleanExtra(EXTRA_DIAGNOSTICS, false)
         setContent {
             SpicetifyTheme {
-                ManagerScreen(onClose = { finish() })
+                ManagerScreen(onClose = { finish() }, openDiagnostics = diagnostics)
             }
         }
+    }
+
+    companion object {
+        const val EXTRA_DIAGNOSTICS = "app.spicetify.android.extra.DIAGNOSTICS"
     }
 }
 
@@ -73,8 +78,8 @@ private enum class Tab(val label: Int, val icon: ImageVector) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ManagerScreen(onClose: () -> Unit) {
-    var tab by rememberSaveable { mutableIntStateOf(0) }
+private fun ManagerScreen(onClose: () -> Unit, openDiagnostics: Boolean = false) {
+    var tab by rememberSaveable { mutableIntStateOf(if (openDiagnostics) Tab.SETTINGS.ordinal else 0) }
     val snackbar = remember { SnackbarHostState() }
     Scaffold(
         topBar = {
@@ -107,7 +112,7 @@ private fun ManagerScreen(onClose: () -> Unit) {
             Tab.THEMES -> ThemesScreen(modifier, snackbar)
             Tab.APPS -> CustomAppsScreen(modifier, snackbar)
             Tab.SNIPPETS -> SnippetsScreen(modifier)
-            Tab.SETTINGS -> SettingsScreen(modifier, snackbar)
+            Tab.SETTINGS -> SettingsScreen(modifier, snackbar, openDiagnostics)
         }
     }
 }

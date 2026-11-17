@@ -1,5 +1,8 @@
 package app.spicetify.android.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -48,6 +51,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,6 +65,7 @@ import app.spicetify.android.R
 import app.spicetify.android.data.LayoutMode
 import app.spicetify.android.data.Snippet
 import app.spicetify.android.data.SpicetifyConfig
+import app.spicetify.android.diagnostics.DiagnosticsLog
 import app.spicetify.android.spicengine.Spicengine
 import app.spicetify.android.spicetify
 import kotlinx.coroutines.Dispatchers
@@ -459,11 +464,13 @@ private fun SwitchRow(label: String, checked: Boolean, description: String? = nu
 }
 
 @Composable
-fun SettingsScreen(modifier: Modifier, snackbar: SnackbarHostState) {
+fun SettingsScreen(modifier: Modifier, snackbar: SnackbarHostState, openDiagnostics: Boolean = false) {
     val context = LocalContext.current
     val app = context.spicetify
     val config = rememberConfig()
     val scope = rememberCoroutineScope()
+    var showDiagnostics by rememberSaveable { mutableStateOf(openDiagnostics) }
+    if (showDiagnostics) DiagnosticsDialog(onDismiss = { showDiagnostics = false })
     var cacheSize by remember { mutableStateOf(app.patchCache.sizeBytes()) }
     val clearedMsg = stringResource(R.string.cache_cleared)
 
@@ -493,6 +500,14 @@ fun SettingsScreen(modifier: Modifier, snackbar: SnackbarHostState) {
         SwitchRow(stringResource(R.string.opt_external_links), config.externalLinksInBrowser) { v -> updateConfig(context) { it.copy(externalLinksInBrowser = v) } }
 
         SectionHeader(stringResource(R.string.maintenance))
+        ListItem(
+            modifier = Modifier.clickable { showDiagnostics = true },
+            headlineContent = { Text(stringResource(R.string.diagnostics)) },
+            supportingContent = { Text(stringResource(R.string.diagnostics_desc), style = MaterialTheme.typography.bodySmall) },
+        )
+        SwitchRow(stringResource(R.string.opt_safe_mode), config.safeMode, stringResource(R.string.opt_safe_mode_desc)) { v ->
+            updateConfig(context) { it.copy(safeMode = v) }
+        }
         SwitchRow(stringResource(R.string.opt_webview_debugging), config.webViewDebugging, stringResource(R.string.opt_webview_debugging_desc)) { v ->
             updateConfig(context) { it.copy(webViewDebugging = v) }
         }
@@ -518,4 +533,40 @@ fun SettingsScreen(modifier: Modifier, snackbar: SnackbarHostState) {
             }
         }
     }
+}
+
+// --- Diagnostics --------------------------------------------------------------
+
+@Composable
+private fun DiagnosticsDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    var report by remember { mutableStateOf(DiagnosticsLog.report(context)) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.diagnostics)) },
+        text = {
+            Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                Text(report, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, report)
+                context.startActivity(Intent.createChooser(send, null))
+            }) { Text(stringResource(R.string.share)) }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = {
+                    val clipboard = context.getSystemService(ClipboardManager::class.java)
+                    clipboard.setPrimaryClip(ClipData.newPlainText("Spicetify diagnostics", report))
+                }) { Text(stringResource(R.string.copy)) }
+                TextButton(onClick = {
+                    DiagnosticsLog.clear()
+                    report = DiagnosticsLog.report(context)
+                }) { Text(stringResource(R.string.clear)) }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) }
+            }
+        },
+    )
 }

@@ -29,6 +29,7 @@ import androidx.core.view.updatePadding
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import app.spicetify.android.diagnostics.DiagnosticsLog
 import app.spicetify.android.playback.PlaybackController
 import app.spicetify.android.playback.PlaybackService
 import app.spicetify.android.ui.ManagerActivity
@@ -53,6 +54,9 @@ class MainActivity : ComponentActivity(), SpotifyWebView.Callbacks {
     private var pendingNavigation: String? = null
     private var pendingSearch: String? = null
     private var engineKeyAtLoad: String? = null
+    private var playerReady = false
+    private lateinit var recoveryBar: RecoveryBar
+    private val watchdog = Runnable { onPlayerTimeout() }
 
     private val fileChooser = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val uris = WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data)
@@ -71,6 +75,7 @@ class MainActivity : ComponentActivity(), SpotifyWebView.Callbacks {
 
         root = FrameLayout(this).apply { setBackgroundColor(android.graphics.Color.parseColor("#121212")) }
         progress = ProgressBar(this).apply { isIndeterminate = true }
+        recoveryBar = RecoveryBar(this)
         setContentView(root)
         ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
@@ -100,11 +105,18 @@ class MainActivity : ComponentActivity(), SpotifyWebView.Callbacks {
             view,
             onOpenManager = { startActivity(Intent(this, ManagerActivity::class.java)) },
             onNavigation = { },
+            onBridgeReady = ::onPlayerReady,
         )
         bridge.install()
         root.removeAllViews()
         root.addView(view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         root.addView(progress, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, android.view.Gravity.CENTER))
+        val margin = (12 * resources.displayMetrics.density).toInt()
+        root.addView(
+            recoveryBar,
+            FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, android.view.Gravity.BOTTOM)
+                .apply { setMargins(margin, margin, margin, margin) },
+        )
         WindowInsetsControllerCompat(window, view).isAppearanceLightStatusBars = false
     }
 
@@ -147,11 +159,58 @@ class MainActivity : ComponentActivity(), SpotifyWebView.Callbacks {
         val configChanged = engineKeyAtLoad != null && engineKeyAtLoad != spicetify.engine.cacheKey
         val scriptChanged = web.refreshStartScript()
         WebView.setWebContentsDebuggingEnabled(spicetify.config.current.webViewDebugging)
-        if (configChanged || scriptChanged) {
-            engineKeyAtLoad = spicetify.engine.cacheKey
-            pageLoaded = false
-            webView?.reload()
+        if (configChanged || scriptChanged) reloadPlayer()
+        updateSafeModeBar()
+    }
+
+    private fun reloadPlayer() {
+        engineKeyAtLoad = spicetify.engine.cacheKey
+        pageLoaded = false
+        webView?.reload()
+    }
+
+    // --- Recovery ---------------------------------------------------------------
+
+    private fun onPlayerReady() {
+        playerReady = true
+        root.removeCallbacks(watchdog)
+        if (!spicetify.engine.safeMode) recoveryBar.hide()
+    }
+
+    private fun onPlayerTimeout() {
+        if (playerReady || spicetify.engine.safeMode) return
+        DiagnosticsLog.log("watchdog", "player not ready after ${PLAYER_TIMEOUT_MS / 1000} s (url=${webView?.url})")
+        recoveryBar.show(
+            getString(R.string.recovery_stuck),
+            getString(R.string.recovery_reload) to { recoveryBar.hide(); reloadPlayer() },
+            getString(R.string.recovery_safe_mode) to { setSafeMode(true) },
+            getString(R.string.recovery_diagnostics) to { openDiagnostics() },
+        )
+    }
+
+    private fun setSafeMode(enabled: Boolean) {
+        spicetify.config.update { it.copy(safeMode = enabled) }
+        DiagnosticsLog.log("watchdog", "safe mode ${if (enabled) "on" else "off"}")
+        web.refreshStartScript()
+        recoveryBar.hide()
+        updateSafeModeBar()
+        reloadPlayer()
+    }
+
+    private fun updateSafeModeBar() {
+        if (spicetify.engine.safeMode) {
+            recoveryBar.show(
+                getString(R.string.safe_mode_active),
+                getString(R.string.safe_mode_exit) to { setSafeMode(false) },
+                getString(R.string.recovery_diagnostics) to { openDiagnostics() },
+            )
+        } else if (playerReady) {
+            recoveryBar.hide()
         }
+    }
+
+    private fun openDiagnostics() {
+        startActivity(Intent(this, ManagerActivity::class.java).putExtra(ManagerActivity.EXTRA_DIAGNOSTICS, true))
     }
 
     override fun onStop() {
@@ -161,6 +220,7 @@ class MainActivity : ComponentActivity(), SpotifyWebView.Callbacks {
     }
 
     override fun onDestroy() {
+        root.removeCallbacks(watchdog)
         bridge.uninstall()
         webView?.let {
             root.removeView(it)
@@ -188,6 +248,13 @@ class MainActivity : ComponentActivity(), SpotifyWebView.Callbacks {
     }
 
     // --- SpotifyWebView.Callbacks ------------------------------------------
+
+    override fun onPageStarted(url: String) {
+        if (Uri.parse(url).host != "open.spotify.com") return
+        playerReady = false
+        root.removeCallbacks(watchdog)
+        root.postDelayed(watchdog, PLAYER_TIMEOUT_MS)
+    }
 
     override fun onPageFinished(url: String) {
         progress.visibility = View.GONE
@@ -243,4 +310,8 @@ class MainActivity : ComponentActivity(), SpotifyWebView.Callbacks {
     override fun openExternal(uri: Uri) = SpotifyWebView.openExternal(this, uri)
 
     override fun onSpotifyUri(uri: String) = bridge.command("navigate", uri)
+
+    companion object {
+        private const val PLAYER_TIMEOUT_MS = 30_000L
+    }
 }

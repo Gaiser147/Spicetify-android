@@ -5,6 +5,7 @@ import android.util.Log
 import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
+import app.spicetify.android.diagnostics.DiagnosticsLog
 import app.spicetify.android.engine.EngineManager
 import app.spicetify.android.engine.SpicetifyResource
 import app.spicetify.android.spicengine.Spicengine
@@ -37,6 +38,7 @@ class SpicetifyInterceptor(
 
     fun intercept(request: WebResourceRequest): WebResourceResponse? {
         if (request.method != "GET") return null
+        if (engine.safeMode) return null
         val url = request.url
         return try {
             when {
@@ -47,6 +49,7 @@ class SpicetifyInterceptor(
             }
         } catch (e: Exception) {
             Log.w(TAG, "interception failed for $url", e)
+            DiagnosticsLog.log("intercept", "failed for $url: $e")
             null
         }
     }
@@ -71,7 +74,7 @@ class SpicetifyInterceptor(
             val original = fetch(request) ?: return null
             val started = System.nanoTime()
             val patched = engine.patchAsset(url, original).toByteArray()
-            Log.d(TAG, "patched ${request.url.lastPathSegment} in ${(System.nanoTime() - started) / 1_000_000} ms")
+            DiagnosticsLog.log("patch", "${request.url.lastPathSegment}: ${(System.nanoTime() - started) / 1_000_000} ms")
             cache.put(url, key, patched)
             locks.remove(url)
             return ok(SpicetifyResource(mimeFor(url), patched), cors = true)
@@ -87,7 +90,7 @@ class SpicetifyInterceptor(
         builder.header("User-Agent", userAgent)
         http.newCall(builder.build()).execute().use { res ->
             if (!res.isSuccessful) {
-                Log.w(TAG, "upstream ${res.code} for ${request.url}")
+                DiagnosticsLog.log("patch", "upstream HTTP ${res.code} for ${request.url}")
                 return null
             }
             return res.body?.string()
@@ -96,7 +99,11 @@ class SpicetifyInterceptor(
 
     private fun spicetifyFile(url: Uri): WebResourceResponse {
         val rel = url.path.orEmpty().removePrefix(EngineManager.BASE_PATH)
-        val res = engine.resolve(Uri.decode(rel)) ?: return notFound()
+        val res = engine.resolve(Uri.decode(rel))
+        if (res == null) {
+            DiagnosticsLog.log("files", "404 ${EngineManager.BASE_PATH}$rel")
+            return notFound()
+        }
         return ok(res, cors = false, cache = false)
     }
 

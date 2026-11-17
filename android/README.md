@@ -41,6 +41,13 @@ Den Manager öffnest du über das Zahnrad-Symbol „Spicetify“ in der oberen L
 
 Wird die App auf dem Handy beendet (aus den letzten Apps gewischt), endet auch die Wiedergabe. Android Auto zeigt dann den Hinweis, Spicetify auf dem Handy zu öffnen.
 
+### Fehlerbehebung
+
+- **Der Player startet nicht oder bleibt schwarz:** Nach 30 Sekunden erscheint unten ein Balken mit „Neu laden“, „Abgesicherter Modus“ und „Diagnose“.
+- **Abgesicherter Modus:** Spotify läuft ganz ohne Spicetify. Funktioniert der Player dort, liegt das Problem bei Spicetify oder einer Erweiterung, sonst bei der WebView bzw. Widevine.
+- **Diagnose:** Einstellungen → Wartung → Diagnose zeigt das Protokoll (Fehler, Ladevorgänge, Abstürze) mit Geräte- und WebView-Version. Über „Teilen“ kannst du es einem Fehlerbericht beilegen.
+- **Einstellungen ohne Player:** Langes Drücken auf das App-Icon → „Spicetify-Einstellungen“.
+
 ### Einschränkungen
 
 - Für die Wiedergabe braucht das Gerät **Widevine-Unterstützung in Android System WebView**. Auf zertifizierten Geräten ist das Standard. Halte Android System WebView aktuell.
@@ -90,6 +97,14 @@ The official Spotify Android app is native code. Spicetify modifies the web clie
 - All `config-xpui.ini` options are available as switches.
 
 Open the manager from the "Spicetify" button in the player's top bar or from the profile menu.
+
+### Troubleshooting
+
+If the player does not come up within 30 seconds, a bar offers Reload, Safe mode and Diagnostics:
+
+- **Safe mode** runs Spotify without Spicetify.
+- **Diagnostics** (also under Settings → Maintenance) contains the player log with device and WebView details, ready to share.
+- Long-press the app icon to open the settings without the player.
 
 ### Limitations
 

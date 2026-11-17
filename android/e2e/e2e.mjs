@@ -29,7 +29,7 @@ const check = (name, ok, detail = "") => {
 
 // Desktop / tablet sized viewport.
 {
-  const { browser, page, errors } = await openPlayer({ viewport: { width: 1280, height: 800 } });
+  const { browser, page, errors, stats } = await openPlayer({ viewport: { width: 1280, height: 800 } });
   const state = await page
     .waitForFunction(
       () =>
@@ -44,6 +44,8 @@ const check = (name, ok, detail = "") => {
     .then(() => true)
     .catch(() => false);
   check("Spicetify core APIs available", state);
+  // A reload on the first start leaves the Android WebView blank.
+  check("No page reload on first start", stats.navigations === 1, `${stats.navigations} navigation(s)`);
   const info = await page.evaluate(() => ({
     config: window.Spicetify?.Config,
     platformKeys: Object.keys(window.Spicetify?.Platform || {}).length,

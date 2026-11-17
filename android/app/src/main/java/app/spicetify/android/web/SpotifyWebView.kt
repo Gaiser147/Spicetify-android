@@ -15,15 +15,19 @@ import android.webkit.PermissionRequest
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.webkit.ScriptHandler
+import androidx.webkit.UserAgentMetadata
+import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import app.spicetify.android.SpicetifyApp
+import app.spicetify.android.diagnostics.DiagnosticsLog
 
 /**
  * Creates and configures the WebView that runs the Spotify web player with
@@ -35,6 +39,7 @@ class SpotifyWebView(
     private val callbacks: Callbacks,
 ) {
     interface Callbacks {
+        fun onPageStarted(url: String)
         fun onPageFinished(url: String)
         fun onRendererGone()
         fun onShowCustomView(view: View, callback: WebChromeClient.CustomViewCallback)
@@ -83,7 +88,14 @@ class SpotifyWebView(
             allowContentAccess = false
         }
         if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
-            androidx.webkit.WebSettingsCompat.setAlgorithmicDarkeningAllowed(view.settings, false)
+            WebSettingsCompat.setAlgorithmicDarkeningAllowed(view.settings, false)
+        }
+        // Present a consistent desktop browser: the user agent string alone is
+        // not enough, because Chromium also sends client hints ("Android
+        // WebView", mobile).
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.USER_AGENT_METADATA)) {
+            runCatching { WebSettingsCompat.setUserAgentMetadata(view.settings, desktopUserAgentMetadata()) }
+                .onFailure { DiagnosticsLog.log("webview", "user agent metadata: $it") }
         }
 
         CookieManager.getInstance().apply {
@@ -102,12 +114,27 @@ class SpotifyWebView(
     /** (Re)registers the document start script; returns true if it changed. */
     fun refreshStartScript(): Boolean {
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return false
-        val source = app.engine.documentStartScript()
+        // Safe mode: no Spicetify at all.
+        val source = if (app.engine.safeMode) "" else app.engine.documentStartScript()
         if (source == startScriptSource) return false
         startScript?.remove()
-        startScript = WebViewCompat.addDocumentStartJavaScript(webView, source, setOf(ORIGIN))
+        startScript = if (source.isEmpty()) null else WebViewCompat.addDocumentStartJavaScript(webView, source, setOf(ORIGIN))
         startScriptSource = source
         return true
+    }
+
+    private fun desktopUserAgentMetadata(): UserAgentMetadata {
+        val major = Regex("Chrome/(\\d+)").find(app.userAgent)?.groupValues?.get(1) ?: "131"
+        fun brand(name: String, version: String) =
+            UserAgentMetadata.BrandVersion.Builder().setBrand(name).setMajorVersion(version).setFullVersion("$version.0.0.0").build()
+        return UserAgentMetadata.Builder()
+            .setBrandVersionList(listOf(brand("Chromium", major), brand("Google Chrome", major), brand("Not_A Brand", "24")))
+            .setFullVersion("$major.0.0.0")
+            .setPlatform("Linux")
+            .setPlatformVersion("")
+            .setModel("")
+            .setMobile(false)
+            .build()
     }
 
     private inner class Client : WebViewClient() {
@@ -138,13 +165,32 @@ class SpotifyWebView(
             return true
         }
 
+        override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
+            DiagnosticsLog.log("page", "started $url${if (app.engine.safeMode) " (safe mode)" else ""}")
+            callbacks.onPageStarted(url)
+        }
+
         override fun onPageFinished(view: WebView, url: String) {
+            DiagnosticsLog.log("page", "finished $url")
             CookieManager.getInstance().flush()
             callbacks.onPageFinished(url)
         }
 
+        override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+            if (request.isForMainFrame || isInternalHost(request.url.host)) {
+                DiagnosticsLog.log("net", "error ${error.errorCode} ${error.description} for ${request.url}")
+            }
+        }
+
+        override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: WebResourceResponse) {
+            if (request.isForMainFrame || request.url.host == SpicetifyInterceptor.CDN_HOST) {
+                DiagnosticsLog.log("net", "HTTP ${response.statusCode} for ${request.url}")
+            }
+        }
+
         override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
             Log.w(TAG, "renderer gone (crash=${detail.didCrash()})")
+            DiagnosticsLog.log("webview", "renderer gone (crash=${detail.didCrash()}, priority=${detail.rendererPriorityAtExit()})")
             callbacks.onRendererGone()
             return true
         }
@@ -158,8 +204,10 @@ class SpotifyWebView(
             if (host != null && isInternalHost(host) &&
                 request.resources.contains(PermissionRequest.RESOURCE_PROTECTED_MEDIA_ID)
             ) {
+                DiagnosticsLog.log("drm", "granted protected media (Widevine) to $host")
                 request.grant(arrayOf(PermissionRequest.RESOURCE_PROTECTED_MEDIA_ID))
             } else {
+                DiagnosticsLog.log("drm", "denied ${request.resources.joinToString()} for $host")
                 request.deny()
             }
         }
@@ -192,8 +240,12 @@ class SpotifyWebView(
         }
 
         override fun onConsoleMessage(message: ConsoleMessage): Boolean {
-            if (message.messageLevel() == ConsoleMessage.MessageLevel.ERROR || message.message().contains("spicetify", true)) {
-                Log.d(TAG, "[console] ${message.message()} (${message.sourceId()}:${message.lineNumber()})")
+            val level = message.messageLevel()
+            if (level == ConsoleMessage.MessageLevel.ERROR || level == ConsoleMessage.MessageLevel.WARNING ||
+                message.message().contains("spicetify", true)
+            ) {
+                val source = message.sourceId().substringAfterLast('/')
+                DiagnosticsLog.log("console", "${level.name.lowercase()}: ${message.message()} ($source:${message.lineNumber()})")
             }
             return true
         }
