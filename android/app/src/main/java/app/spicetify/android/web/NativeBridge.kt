@@ -12,6 +12,8 @@ import androidx.webkit.WebViewFeature
 import app.spicetify.android.playback.PlaybackController
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Receives messages from android/web/bridge.js and sends commands back.
@@ -26,6 +28,8 @@ class NativeBridge(
     private val onNavigation: (String) -> Unit,
 ) {
     private val main = Handler(Looper.getMainLooper())
+    private val nextRequestId = AtomicInteger(1)
+    private val pending = ConcurrentHashMap<Int, (String) -> Unit>()
 
     @SuppressLint("JavascriptInterface", "AddJavascriptInterface")
     fun install() {
@@ -42,10 +46,31 @@ class NativeBridge(
             webView.addJavascriptInterface(LegacyInterface(), NAME)
         }
         PlaybackController.sink = PlaybackController.CommandSink { command, argument -> command(command, argument) }
+        PlaybackController.requester = PlaybackController.Requester { method, argument, onResult ->
+            request(method, argument, onResult)
+            true
+        }
     }
 
     fun uninstall() {
-        if (PlaybackController.sink != null) PlaybackController.sink = null
+        PlaybackController.sink = null
+        PlaybackController.requester = null
+        pending.values.forEach { it("""{"ok":false,"error":"player closed"}""") }
+        pending.clear()
+    }
+
+    /** Calls SpicetifyAndroidBridge.request(); the reply arrives as onResult. */
+    fun request(method: String, argument: String, onResult: (String) -> Unit) {
+        val id = nextRequestId.getAndIncrement()
+        pending[id] = onResult
+        val js = "window.SpicetifyAndroidBridge?SpicetifyAndroidBridge.request($id,${JSONObject.quote(method)},${JSONObject.quote(argument)}):false"
+        main.post {
+            webView.evaluateJavascript(js) { result ->
+                if (result != "true") pending.remove(id)?.invoke("""{"ok":false,"error":"bridge not ready"}""")
+            }
+        }
+        // Do not keep callers waiting forever.
+        main.postDelayed({ pending.remove(id)?.invoke("""{"ok":false,"error":"timeout"}""") }, REQUEST_TIMEOUT_MS)
     }
 
     private fun dispatch(method: String, args: JSONArray) {
@@ -54,6 +79,7 @@ class NativeBridge(
             "onNavigation" -> main.post { onNavigation(args.optString(0, "/")) }
             "openManager" -> main.post(onOpenManager)
             "onBridgeReady" -> Log.i(TAG, "bridge ready ${args.optString(0)}")
+            "onResult" -> pending.remove(args.optInt(0))?.invoke(args.optString(1, "{}"))
         }
     }
 
@@ -83,11 +109,15 @@ class NativeBridge(
 
         @JavascriptInterface
         fun onBridgeReady(json: String) = dispatch("onBridgeReady", JSONArray().put(json))
+
+        @JavascriptInterface
+        fun onResult(id: Int, json: String) = dispatch("onResult", JSONArray().put(id).put(json))
     }
 
     companion object {
         private const val TAG = "SpicetifyBridge"
         const val NAME = "SpicetifyAndroid"
         const val ORIGIN = "https://open.spotify.com"
+        private const val REQUEST_TIMEOUT_MS = 20_000L
     }
 }

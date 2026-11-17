@@ -65,4 +65,12 @@
     <string name="cache_cleared">Patch-Cache geleert</string>
     <string name="about">Über</string>
     <string name="about_text">Spicetify für Android führt den Spotify-Web-Player mit den Patches, Erweiterungen, Themes und Custom Apps von Spicetify aus. Kein offizielles Spotify-Produkt. Für die Wiedergabe muss Android System WebView Widevine unterstützen.</string>
+
+    <string name="auto_recent">Zuletzt gespielt</string>
+    <string name="auto_liked">Lieblingssongs</string>
+    <string name="auto_playlists">Playlists</string>
+    <string name="auto_albums">Alben</string>
+    <string name="auto_open_app">Öffne Spicetify auf dem Handy, um deine Bibliothek zu durchsuchen.</string>
+    <string name="auto_error">Konnte nicht geladen werden. Versuch es erneut.</string>
+    <string name="auto_empty">Hier ist noch nichts.</string>
 </resources>

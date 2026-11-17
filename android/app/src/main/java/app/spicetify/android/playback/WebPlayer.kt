@@ -45,6 +45,10 @@ class WebPlayer(looper: Looper = Looper.getMainLooper()) : SimpleBasePlayer(loop
                 COMMAND_GET_TIMELINE,
                 COMMAND_SET_SHUFFLE_MODE,
                 COMMAND_SET_REPEAT_MODE,
+                COMMAND_PREPARE,
+                // Android Auto / voice: selecting an item sets it as the playlist.
+                COMMAND_SET_MEDIA_ITEM,
+                COMMAND_CHANGE_MEDIA_ITEMS,
             )
             .apply {
                 if (s.hasTrack) {
@@ -169,6 +173,38 @@ class WebPlayer(looper: Looper = Looper.getMainLooper()) : SimpleBasePlayer(loop
     }
 
     override fun handleRelease(): ListenableFuture<*> = Futures.immediateVoidFuture()
+
+    override fun handlePrepare(): ListenableFuture<*> = Futures.immediateVoidFuture()
+
+    /**
+     * An item was chosen in Android Auto or requested by voice. The web player
+     * owns the queue, so the item is turned into a play command instead of
+     * replacing this player's (mirrored) playlist.
+     */
+    override fun handleSetMediaItems(mediaItems: List<MediaItem>, startIndex: Int, startPositionMs: Long): ListenableFuture<*> {
+        val item = mediaItems.getOrNull(if (startIndex == C.INDEX_UNSET) 0 else startIndex.coerceAtLeast(0)) ?: mediaItems.firstOrNull()
+        if (item != null) play(item)
+        return Futures.immediateVoidFuture()
+    }
+
+    override fun handleAddMediaItems(index: Int, mediaItems: List<MediaItem>): ListenableFuture<*> {
+        mediaItems.firstOrNull()?.let { play(it) }
+        return Futures.immediateVoidFuture()
+    }
+
+    // The mirrored playlist cannot be edited; these are accepted as no-ops.
+    override fun handleRemoveMediaItems(fromIndex: Int, toIndex: Int): ListenableFuture<*> = Futures.immediateVoidFuture()
+
+    override fun handleMoveMediaItems(fromIndex: Int, toIndex: Int, newIndex: Int): ListenableFuture<*> = Futures.immediateVoidFuture()
+
+    private fun play(item: MediaItem) {
+        val query = item.requestMetadata.searchQuery
+        when {
+            item.mediaId.isNotEmpty() && item.mediaId != "hint" -> PlaybackController.playItem(item.mediaId)
+            !query.isNullOrBlank() -> PlaybackController.playSearch(query)
+            else -> PlaybackController.play()
+        }
+    }
 
     companion object {
         private const val CURRENT_INDEX = 1

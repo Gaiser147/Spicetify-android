@@ -15,11 +15,23 @@ object PlaybackController {
         fun send(command: String, argument: String?)
     }
 
+    /** Asynchronous request to the page (media library browse/search). */
+    fun interface Requester {
+        /** Returns false when no page is available; [onResult] gets the JSON reply. */
+        fun request(method: String, argument: String, onResult: (String) -> Unit): Boolean
+    }
+
     private val mutableState = MutableStateFlow(WebPlaybackState())
     val state: StateFlow<WebPlaybackState> = mutableState.asStateFlow()
 
     @Volatile
     var sink: CommandSink? = null
+
+    @Volatile
+    var requester: Requester? = null
+
+    /** True while the WebView with the web player exists. */
+    val isPlayerAvailable: Boolean get() = sink != null
 
     fun onStateJson(json: String) {
         runCatching { WebPlaybackState.fromJson(json, SystemClock.elapsedRealtime()) }
@@ -39,4 +51,6 @@ object PlaybackController {
     fun toggleRepeat() = command("toggleRepeat")
     fun toggleLike() = command("toggleHeart")
     fun navigate(uriOrUrl: String) = command("navigate", uriOrUrl)
+    fun playItem(itemId: String) = command("playItem", itemId)
+    fun playSearch(query: String) = command("playSearch", query)
 }

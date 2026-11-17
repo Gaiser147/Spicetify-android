@@ -97,6 +97,28 @@ const check = (name, ok, detail = "") => {
     await page.screenshot({ path: join(out, "desktop-marketplace.png") });
   }
 
+  // Android Auto library: search and browse through the bridge (works without login).
+  const auto = await page.evaluate(async () => {
+    try {
+      const L = window.SpicetifyAndroidBridge.library;
+      const results = await L.search("daft punk");
+      const playlist = results.find((r) => r.id.startsWith("playlist|"));
+      const album = results.find((r) => r.id.startsWith("album|"));
+      const playlistItems = playlist ? await L.browse(playlist.id) : [];
+      const albumItems = album ? await L.browse(album.id) : [];
+      return {
+        results: results.length,
+        playlistItems: playlistItems.length,
+        albumItems: albumItems.length,
+        art: results.filter((r) => r.artUrl).length,
+      };
+    } catch (e) {
+      return { error: String(e?.message || e) };
+    }
+  });
+  check("Auto library: search", auto.results > 3, JSON.stringify(auto));
+  check("Auto library: browse playlist and album", auto.playlistItems > 0 && auto.albumItems > 0);
+
   await page.evaluate(() => window.Spicetify.Platform.History.push("/"));
   await page.waitForTimeout(3000);
   await page.screenshot({ path: join(out, "desktop-home.png") });

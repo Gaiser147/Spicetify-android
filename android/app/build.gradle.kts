@@ -131,7 +131,8 @@ val buildEngine by tasks.registering(Exec::class) {
         "-androidapi", "26",
         "-javapkg", "app.spicetify.android",
         "-trimpath",
-        "-ldflags", "-s -w",
+        // 16 KB page alignment is required on newer devices (Android 15+).
+        "-ldflags", "-s -w -extldflags=-Wl,-z,max-page-size=16384",
         "-o", engineAar.absolutePath,
         ".",
     )

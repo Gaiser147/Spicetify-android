@@ -44,6 +44,11 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="spotify" />
             </intent-filter>
+            <!-- "Play … on Spicetify" (Google Assistant, Android Auto) -->
+            <intent-filter>
+                <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
         </activity>
 
         <activity
@@ -57,8 +62,22 @@
             android:exported="true"
             android:foregroundServiceType="mediaPlayback">
             <intent-filter>
+                <action android:name="androidx.media3.session.MediaLibraryService" />
                 <action android:name="androidx.media3.session.MediaSessionService" />
+                <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
         </service>
+
+        <!-- Cover art for Android Auto (content:// only); Spotify image hosts only. -->
+        <provider
+            android:name=".playback.ArtworkProvider"
+            android:authorities="${applicationId}.artwork"
+            android:exported="true"
+            tools:ignore="ExportedContentProvider" />
+
+        <!-- Android Auto -->
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
     </application>
 </manifest>

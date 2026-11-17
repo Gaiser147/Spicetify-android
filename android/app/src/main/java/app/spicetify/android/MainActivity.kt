@@ -1,12 +1,14 @@
 package app.spicetify.android
 
 import android.Manifest
+import android.app.SearchManager
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.MediaStore
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.ValueCallback
@@ -27,6 +29,7 @@ import androidx.core.view.updatePadding
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import app.spicetify.android.playback.PlaybackController
 import app.spicetify.android.playback.PlaybackService
 import app.spicetify.android.ui.ManagerActivity
 import app.spicetify.android.web.NativeBridge
@@ -48,6 +51,7 @@ class MainActivity : ComponentActivity(), SpotifyWebView.Callbacks {
     private var fileCallback: ValueCallback<Array<Uri>>? = null
     private var pageLoaded = false
     private var pendingNavigation: String? = null
+    private var pendingSearch: String? = null
     private var engineKeyAtLoad: String? = null
 
     private val fileChooser = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -105,6 +109,7 @@ class MainActivity : ComponentActivity(), SpotifyWebView.Callbacks {
     }
 
     private fun loadInitial(intent: Intent?) {
+        searchQuery(intent)?.let { pendingSearch = it }
         val target = intent?.data?.let { SpotifyWebView.toWebUrl(it) } ?: SpotifyWebView.HOME
         pageLoaded = false
         engineKeyAtLoad = spicetify.engine.cacheKey
@@ -112,8 +117,18 @@ class MainActivity : ComponentActivity(), SpotifyWebView.Callbacks {
         webView?.loadUrl(target)
     }
 
+    /** Query of a MEDIA_PLAY_FROM_SEARCH intent ("play … on Spicetify"). */
+    private fun searchQuery(intent: Intent?): String? {
+        if (intent?.action != MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH) return null
+        return intent.getStringExtra(SearchManager.QUERY)?.takeIf { it.isNotBlank() }
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        searchQuery(intent)?.let { query ->
+            if (pageLoaded) PlaybackController.playSearch(query) else pendingSearch = query
+            return
+        }
         val data = intent.data ?: return
         val url = SpotifyWebView.toWebUrl(data) ?: return
         if (pageLoaded) bridge.command("navigate", url) else pendingNavigation = url
@@ -181,6 +196,11 @@ class MainActivity : ComponentActivity(), SpotifyWebView.Callbacks {
             pendingNavigation?.let {
                 pendingNavigation = null
                 bridge.command("navigate", it)
+            }
+            pendingSearch?.let { query ->
+                pendingSearch = null
+                // Give the player a moment to initialise before searching.
+                root.postDelayed({ PlaybackController.playSearch(query) }, 4000)
             }
         }
     }

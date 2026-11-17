@@ -69,6 +69,164 @@
     send("onPlaybackState", json);
   };
 
+  // --- Media library for Android Auto ------------------------------------
+  // Uses the web player's own APIs (Spicetify.Platform, GraphQL); the Web API
+  // is only a last resort because it rate-limits web player tokens.
+  const api = async (path) => {
+    const url = `https://api.spotify.com/v1${path}`;
+    const token = Spicetify.Platform?.AuthorizationAPI?.getState?.()?.token?.accessToken;
+    const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    if (!res.ok) throw new Error(`HTTP ${res.status} for ${path}`);
+    return res.json();
+  };
+  const gql = async (name, variables) => {
+    const def = Spicetify.GraphQL?.Definitions?.[name];
+    if (!def) throw new Error(`GraphQL ${name} unavailable`);
+    const res = await Spicetify.GraphQL.Request(def, variables);
+    if (res?.errors?.length) throw new Error(res.errors[0].message);
+    return res.data;
+  };
+
+  const sourcesOf = (o) =>
+    o?.images?.items?.[0]?.sources ??
+    o?.coverArt?.sources ??
+    o?.albumOfTrack?.coverArt?.sources ??
+    o?.visuals?.avatarImage?.sources ??
+    o?.album?.images ??
+    o?.album?.coverArt?.sources ??
+    (Array.isArray(o?.images) ? o.images : null);
+  const imageOf = (o) => {
+    const list = (sourcesOf(o) || []).filter((i) => i?.url);
+    if (!list.length) return "";
+    const fit = list.filter((i) => !i.width || i.width <= 640).sort((x, y) => (y.width || 0) - (x.width || 0));
+    return (fit[0] || list[0]).url;
+  };
+  const artistsOf = (o) => {
+    const list = Array.isArray(o?.artists) ? o.artists : (o?.artists?.items ?? []);
+    const text = list
+      .map((a) => a?.name ?? a?.profile?.name)
+      .filter(Boolean)
+      .join(", ");
+    return text || o?.album?.artist?.name || o?.owner?.name || o?.ownerV2?.data?.name || "";
+  };
+  const typeOf = (o) => String(o?.type || o?.__typename || o?.uri?.split(":")[1] || "").toLowerCase();
+  const playId = (context, track) => `play|${context || ""}|${track || ""}`;
+
+  /** Maps Platform / GraphQL / Web API objects to library items. */
+  const toItem = (o, context, fallbackArt) => {
+    if (!o?.uri || (!o?.name && !o?.profile?.name)) return null;
+    const title = o.name ?? o.profile.name;
+    const type = typeOf(o);
+    const art = imageOf(o) || fallbackArt || "";
+    if (type === "track" || type === "episode") {
+      return { id: playId(context, o.uri), title, subtitle: artistsOf(o), artUrl: art, playable: true, browsable: false };
+    }
+    if (type === "album" || type === "playlist") {
+      return { id: `${type}|${o.uri}`, title, subtitle: artistsOf(o), artUrl: art, playable: true, browsable: true };
+    }
+    if (type === "artist") return { id: playId(o.uri, ""), title, subtitle: "", artUrl: art, playable: true, browsable: false };
+    return null;
+  };
+  const compact = (list) => list.filter(Boolean);
+
+  let username = null;
+  const getUsername = async () =>
+    (username ??=
+      Spicetify.Platform?.UserAPI?._product_state?.cache?.get?.("username") ??
+      (await Spicetify.Platform?.RootlistAPI?.getUsername?.()) ??
+      (await api("/me")).id);
+  const likedContext = async () => `spotify:user:${await getUsername()}:collection`;
+
+  const libraryItems = async () => {
+    const res = await Spicetify.Platform.LibraryAPI.getContents({ filters: [], sortOrder: ["0"], textFilter: "", offset: 0, limit: 500 });
+    return res?.items ?? [];
+  };
+
+  const library = {
+    async browse(nodeId) {
+      const [kind, uri] = nodeId.split("|");
+      switch (kind) {
+        case "root":
+          return [
+            { id: "recent", title: "Recently played", browsable: true },
+            { id: "liked", title: "Liked Songs", browsable: true, playable: true },
+            { id: "playlists", title: "Playlists", browsable: true },
+            { id: "albums", title: "Albums", browsable: true },
+          ];
+        case "recent": {
+          let items = [];
+          try {
+            const res = await Spicetify.Platform.RecentsAPI.getContents({ limit: 50 });
+            items = res?.items ?? res ?? [];
+          } catch {}
+          if (!items.length) items = ((await api("/me/player/recently-played?limit=40")).items || []).map((i) => i.track);
+          const seen = new Set();
+          return compact(items.filter((i) => i?.uri && !seen.has(i.uri) && seen.add(i.uri)).map((i) => toItem(i)));
+        }
+        case "liked": {
+          const context = await likedContext();
+          const res = await Spicetify.Platform.LibraryAPI.getTracks({ limit: 100, offset: 0 });
+          return compact((res?.items ?? []).map((t) => toItem(t, context)));
+        }
+        case "playlists": {
+          const flatten = (rows) => rows.flatMap((r) => (r.type === "folder" ? flatten(r.items ?? []) : [r]));
+          let rows = [];
+          try {
+            rows = flatten((await Spicetify.Platform.RootlistAPI.getContents())?.items ?? []);
+          } catch {
+            rows = await libraryItems();
+          }
+          return compact(rows.filter((r) => typeOf(r) === "playlist").map((p) => toItem(p)));
+        }
+        case "albums":
+          return compact((await libraryItems()).filter((r) => typeOf(r) === "album").map((a) => toItem(a)));
+        case "playlist": {
+          const res = await Spicetify.Platform.PlaylistAPI.getContents(uri, { limit: 200 });
+          return compact((res?.items ?? []).filter((t) => t.isPlayable !== false).map((t) => toItem(t, uri)));
+        }
+        case "album": {
+          const data = await gql("queryAlbumTracks", { uri, offset: 0, limit: 100 });
+          let art = "";
+          try {
+            art = imageOf((await gql("getAlbum", { uri, locale: "", offset: 0, limit: 1 }))?.albumUnion);
+          } catch {}
+          return compact((data?.albumUnion?.tracksV2?.items ?? []).map((i) => toItem({ ...i.track, type: "track" }, uri, art)));
+        }
+        default:
+          return [];
+      }
+    },
+    async search(query) {
+      const data = await gql("searchModalResults", {
+        searchTerm: query,
+        offset: 0,
+        limit: 20,
+        numberOfTopResults: 20,
+        includeAuthors: false,
+      });
+      const items = (data?.searchV2?.topResultsV2?.itemsV2 ?? []).map((i) => i?.item?.data).filter(Boolean);
+      return compact(items.map((o) => toItem(o, typeOf(o) === "track" ? o.albumOfTrack?.uri : undefined)));
+    },
+  };
+
+  /** Plays a library item id ("play|context|track", "playlist|uri", "liked", ...). */
+  const playItem = async (itemId) => {
+    const [kind, a, b] = itemId.split("|");
+    if (kind === "play") {
+      const context = a || b;
+      const options = a && b ? { skipTo: { uri: b } } : {};
+      return Spicetify.Player.playUri(context, {}, options);
+    }
+    if (kind === "liked") return Spicetify.Player.playUri(await likedContext());
+    if (a) return Spicetify.Player.playUri(a);
+  };
+
+  const playSearch = async (query) => {
+    const results = await library.search(query);
+    const first = results.find((r) => r.playable);
+    if (first) await playItem(first.id);
+  };
+
   const commands = {
     play: () => Spicetify.Player.play(),
     pause: () => Spicetify.Player.pause(),
@@ -80,6 +238,8 @@
     toggleRepeat: () => Spicetify.Player.toggleRepeat(),
     toggleHeart: () => Spicetify.Player.toggleHeart(),
     stop: () => Spicetify.Player.pause(),
+    playItem: (itemId) => playItem(itemId),
+    playSearch: (query) => playSearch(query),
     navigate: (target) => {
       if (!target) return;
       let path = target;
@@ -94,12 +254,23 @@
   };
 
   window.SpicetifyAndroidBridge = {
+    /**
+     * Asynchronous request from the app; the result is sent back with
+     * onResult(id, json) as {ok, items} or {ok: false, error}.
+     */
+    request(id, method, arg) {
+      const run = method === "search" ? library.search(arg) : library.browse(arg);
+      run
+        .then((items) => send("onResult", id, JSON.stringify({ ok: true, items })))
+        .catch((e) => send("onResult", id, JSON.stringify({ ok: false, error: String(e?.message || e) })));
+      return true;
+    },
     /** Called by the app: `SpicetifyAndroidBridge.command("next")`. */
     command(name, arg) {
       const fn = commands[name];
       if (!fn) return false;
       try {
-        fn(arg);
+        Promise.resolve(fn(arg)).catch((e) => console.warn("[spicetify-android] command failed", name, e));
       } catch (e) {
         console.warn("[spicetify-android] command failed", name, e);
         return false;
@@ -125,6 +296,7 @@
       return false;
     },
     state: snapshot,
+    library,
   };
 
   const waitFor = (check, cb) => {

@@ -101,7 +101,7 @@ class SpotifyWebView(
 
     /** (Re)registers the document start script; returns true if it changed. */
     fun refreshStartScript(): Boolean {
-        if (!usesDocumentStartScript) return false
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return false
         val source = app.engine.documentStartScript()
         if (source == startScriptSource) return false
         startScript?.remove()

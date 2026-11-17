@@ -21,6 +21,7 @@ Die offizielle Spotify-App für Android ist nativ geschrieben (Kotlin/Java). Spi
 - **CSS-Snippets** mit eingebautem Editor.
 - **Mobiles Layout** auf Handys: Die Bibliothek wird zum Seitenmenü (Hamburger oder Wisch von links), die Wiedergabeleiste ist kompakt, und „Läuft gerade“, Warteschlange und Lyrics öffnen als Vollbild-Panel (Tipp auf den Titel). Tablets behalten das Desktop-Layout. Du kannst das Layout in den Einstellungen erzwingen.
 - **Android-Integration:** Hintergrund-Wiedergabe, Medien-Benachrichtigung, Sperrbildschirm, Bluetooth- und Kopfhörertasten, Zurück-Taste, `open.spotify.com`-Links und `spotify:`-URIs.
+- **Android Auto:** Durchsuchbare Bibliothek mit „Zuletzt gespielt“, „Lieblingssongs“, Playlists und Alben, dazu Suche, Sprachbefehle („Spiele … auf Spicetify“), Cover und Wiedergabesteuerung, siehe [Android Auto](#android-auto).
 - **Spotify Connect** wie im Web-Player (als Gerät und zum Fernsteuern).
 - Die Optionen aus `config-xpui.ini` gibt es als Schalter in den Einstellungen: Sentry und Logging deaktivieren, APIs freigeben, Home-, Sidebar- und experimentelle Konfiguration, RTL entfernen.
 
@@ -31,6 +32,14 @@ Den Manager öffnest du über das Zahnrad-Symbol „Spicetify“ in der oberen L
 1. Lade die APK aus den Artefakten des Workflows **Android** (GitHub Actions) herunter oder baue sie selbst (siehe unten).
 2. Erlaube die Installation aus unbekannten Quellen und installiere die APK.
 3. Melde dich mit **E-Mail/Benutzername und Passwort** oder über **„Mit Code anmelden“** an. Google verbietet die Anmeldung in eingebetteten WebViews, deshalb funktioniert „Weiter mit Google“ nicht.
+
+### Android Auto
+
+1. Öffne Spicetify auf dem Handy und melde dich an. Android Auto steuert den Player in der App, die Bibliothek wird über den Web-Player geladen.
+2. Android Auto zeigt per APK installierte Apps erst an, wenn du in Android Auto **„Unbekannte Quellen“** erlaubst: Android-Auto-Einstellungen öffnen → mehrmals auf „Version“ tippen, um die Entwickleroptionen freizuschalten → Menü ⋮ → Entwicklereinstellungen → **Unbekannte Quellen** aktivieren.
+3. Danach erscheint Spicetify im Medienbereich von Android Auto, mit Bibliothek, Suche und Sprachsteuerung.
+
+Wird die App auf dem Handy beendet (aus den letzten Apps gewischt), endet auch die Wiedergabe. Android Auto zeigt dann den Hinweis, Spicetify auf dem Handy zu öffnen.
 
 ### Einschränkungen
 
@@ -77,6 +86,7 @@ The official Spotify Android app is native code. Spicetify modifies the web clie
 - **CSS snippets** with an editor.
 - **Phone layout:** the library becomes a drawer, the now playing bar is compact, and the now playing view, queue and lyrics open as a full-screen panel. Tablets keep the desktop layout.
 - **Android integration:** background playback, media notification, lock screen, Bluetooth/headset buttons, back button, `open.spotify.com` links and `spotify:` URIs.
+- **Android Auto:** browse recently played, Liked Songs, playlists and albums, with search, voice requests ("play … on Spicetify"), cover art and playback controls. Keep Spicetify open on the phone. Because the app is sideloaded, enable **Unknown sources** in Android Auto's developer settings (tap "Version" repeatedly to unlock them).
 - All `config-xpui.ini` options are available as switches.
 
 Open the manager from the "Spicetify" button in the player's top bar or from the profile menu.
@@ -108,7 +118,8 @@ See the commands in the German section above. The requirements are JDK 17+, Andr
 │   │   ├─ …/spicetify-routes-<app>.js|css → custom app chunk     │
 │   │   └─ open.spotify.com/__spicetify/** → bundled/user files   │
 │   └─ NativeBridge (addWebMessageListener, open.spotify.com only)│
-│ PlaybackService: Media3 session mirroring the web player        │
+│ PlaybackService: Media3 library session mirroring the web player│
+│   (notification, lock screen, Bluetooth, Android Auto browse)   │
 │ ManagerActivity: extensions, themes, apps, snippets, settings   │
 └─────────────────────────────────────────────────────────────────┘
         ▲ gomobile (android/engine)
@@ -117,7 +128,7 @@ See the commands in the German section above. The requirements are JDK 17+, Andr
 
 - **`src/patcher`** is the string-based API on top of the desktop CLI's patch code (`src/preprocess`, `src/apply`). Both apply the same patches. It maps web player bundles to their desktop counterparts (`web-player.*.js` → `xpui.js`, `vendor~web-player.*.js` → `vendor~xpui.js`) and creates the document start script.
 - **`android/engine`** is the gomobile binding module, built into `app/libs/spicengine.aar`.
-- **`android/web`** contains the web side of the port: `bridge.js` (playback state, commands, back navigation), `mobile.js` and `mobile.css` (phone layout).
+- **`android/web`** contains the web side of the port: `bridge.js` (playback state, commands, back navigation, and the Android Auto library through Spicetify.Platform and GraphQL), `mobile.js` and `mobile.css` (phone layout).
 - **`src/jsHelper/spicetifyWrapper`** handles the web player: it loads before `<body>` exists, has a Cosmos fallback, maps the PlayerAPI's `_state`/`_events`/`_queue`, and evaluates webpack modules only when their dependencies are loaded.
 - The desktop hashes in `css-map.json` also cover the web player, because the two share their class name hashes.
 

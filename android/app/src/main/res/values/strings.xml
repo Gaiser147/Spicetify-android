@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Spicetify</string>
-    <string name="manager_title">Spicetify</string>
+    <string name="app_name" translatable="false">Spicetify</string>
+    <string name="manager_title" translatable="false">Spicetify</string>
     <string name="back">Back</string>
 
     <string name="tab_extensions">Extensions</string>
@@ -67,4 +67,12 @@
     <string name="cache_cleared">Patch cache cleared</string>
     <string name="about">About</string>
     <string name="about_text">Spicetify for Android runs the Spotify web player with Spicetify\'s patches, extensions, themes and custom apps. It is not affiliated with Spotify. Playback requires Widevine support in Android System WebView.</string>
+
+    <string name="auto_recent">Recently played</string>
+    <string name="auto_liked">Liked Songs</string>
+    <string name="auto_playlists">Playlists</string>
+    <string name="auto_albums">Albums</string>
+    <string name="auto_open_app">Open Spicetify on your phone to browse your library.</string>
+    <string name="auto_error">Could not load. Try again.</string>
+    <string name="auto_empty">Nothing here yet.</string>
 </resources>
