@@ -35,6 +35,13 @@ func (e *Engine) DocumentStartScript() string { return e.p.DocumentStartScript()
 // ResolveSpicetifyPath returns candidate files (JSON array) for a path below /__spicetify/.
 func (e *Engine) ResolveSpicetifyPath(rel string) string { return e.p.ResolveSpicetifyPath(rel) }
 
+// DocumentShellPath returns the document to load instead of a main frame
+// navigation to a custom app route ("/" or "/intl-xx/"), "" for none.
+func (e *Engine) DocumentShellPath(path string) string { return e.p.DocumentShellPath(path) }
+
+// RewriteCSP opens up script-src in the page's Content-Security-Policy.
+func RewriteCSP(header string) string { return patcher.RewriteCSP(header) }
+
 // Report returns which patches were applied (JSON).
 func (e *Engine) Report() string { return e.p.Report() }
 

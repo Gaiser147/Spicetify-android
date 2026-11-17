@@ -100,6 +100,14 @@ func main() {
 	http.HandleFunc("/report", func(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, p.Report())
 	})
+	http.HandleFunc("/document", func(w http.ResponseWriter, r *http.Request) {
+		// Document interception helpers for the e2e harness.
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"shell": p.DocumentShellPath(r.URL.Query().Get("path")),
+			"csp":   patcher.RewriteCSP(r.URL.Query().Get("csp")),
+		})
+	})
 	http.HandleFunc("/custom-app/", h.customApp)
 	http.HandleFunc("/__spicetify/", h.spicetifyFile)
 

@@ -85,6 +85,7 @@ class NativeBridge(
                 main.post(onBridgeReady)
             }
             "onResult" -> pending.remove(args.optInt(0))?.invoke(args.optString(1, "{}"))
+            "log" -> DiagnosticsLog.log(args.optString(0, "web").take(24), args.optString(1).take(2000))
         }
     }
 
@@ -117,6 +118,9 @@ class NativeBridge(
 
         @JavascriptInterface
         fun onResult(id: Int, json: String) = dispatch("onResult", JSONArray().put(id).put(json))
+
+        @JavascriptInterface
+        fun log(tag: String, message: String) = dispatch("log", JSONArray().put(tag).put(message))
     }
 
     companion object {

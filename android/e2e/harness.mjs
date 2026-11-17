@@ -133,6 +133,30 @@ export async function startHarness({ out, marketplace = "", apps: baseApps = ["l
         if (!/closed|Target page|browser context/i.test(String(e?.message))) errors.push(`[route] ${e?.message || e}`);
       }
     };
+    // Main frame documents, like SpicetifyInterceptor.document(): custom app
+    // routes load the app shell, the CSP's script-src is opened up.
+    // Registered first, so the more specific routes below take precedence.
+    stats.documents = [];
+    await context.route(
+      /^https:\/\/open\.spotify\.com\//,
+      safe(async (route) => {
+        const request = route.request();
+        if (request.method() !== "GET" || !request.isNavigationRequest() || request.frame() !== page.mainFrame()) return route.fallback();
+        const url = new URL(request.url());
+        const doc = async (csp = "") =>
+          (await fetch(`${hostUrl}/document?path=${encodeURIComponent(url.pathname)}&csp=${encodeURIComponent(csp)}`)).json();
+        const { shell } = await doc();
+        const target = shell ? new URL(shell, url).href : url.href;
+        const response = await route.fetch({ url: target, maxRedirects: shell ? 20 : 0 });
+        if (response.status() !== 200 || !/html/.test(response.headers()["content-type"] || "")) return route.fallback();
+        const headers = { ...response.headers() };
+        delete headers["content-length"];
+        delete headers["content-encoding"];
+        if (headers["content-security-policy"]) headers["content-security-policy"] = (await doc(headers["content-security-policy"])).csp;
+        stats.documents.push({ path: url.pathname, shell, csp: headers["content-security-policy"] || "" });
+        return route.fulfill({ status: 200, headers, body: await response.text() });
+      }),
+    );
     await context.route(
       "https://open.spotifycdn.com/cdn/build/web-player/**",
       safe(async (route) => {
