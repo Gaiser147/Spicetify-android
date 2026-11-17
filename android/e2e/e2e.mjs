@@ -182,6 +182,36 @@ const check = (name, ok, detail = "") => {
   check("Auto library: search", auto.results > 3, JSON.stringify(auto));
   check("Auto library: browse playlist and album", auto.playlistItems > 0 && auto.albumItems > 0);
 
+  // Playback diagnostics: a play tap logs Spotify requests and the player state,
+  // WebSockets are reported (last: the test may open a login dialog), the playback test calls the PlayerAPI.
+  const diag = await page.evaluate(async () => {
+    const messages = () => (window.__nativeMessages || []).filter((m) => m.method === "log").map((m) => `[${m.args[0]}] ${m.args[1]}`);
+    const button = document.createElement("button");
+    button.dataset.testid = "play-button";
+    document.body.appendChild(button);
+    button.click();
+    button.remove();
+    await fetch("https://open.spotify.com/robots.txt").catch(() => {});
+    const ws = new WebSocket("wss://dealer.spotify.com/");
+    window.SpicetifyAndroidBridge.command("testPlayback");
+    await new Promise((r) => setTimeout(r, 6000));
+    ws.close();
+    const all = messages();
+    return {
+      tap: all.some((m) => m.includes("tap play-button") && m.includes('"devices"')),
+      request: all.some((m) => m.startsWith("[player-net] GET open.spotify.com/robots.txt -> 200")),
+      websocket: all.some((m) => m.includes("ws connecting dealer.spotify.com")),
+      test: all.some((m) => /test: (\w+\(\) resolved|player call rejected)/.test(m)),
+      environment: all.some((m) => m.startsWith("[player] environment")),
+      sample: all.filter((m) => /tap|test:|ws /.test(m)).map((m) => m.slice(0, 160)),
+    };
+  });
+  check(
+    "Playback diagnostics: tap, requests, WebSocket and playback test logged",
+    diag.tap && diag.request && diag.websocket && diag.test && diag.environment,
+    JSON.stringify(diag),
+  );
+
   await page.evaluate(() => window.Spicetify.Platform.History.push("/"));
   await page.waitForTimeout(3000);
   await page.screenshot({ path: join(out, "desktop-home.png") });

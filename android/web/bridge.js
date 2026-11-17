@@ -22,93 +22,11 @@
     }
   };
 
-  // --- Playback diagnostics ---------------------------------------------
-  // Written to the app's diagnostics log (tag "player") to find out why
-  // playback does not start on a device: DRM (Widevine) setup, media element
-  // errors and what the player reports after a play tap. Only wraps browser
-  // APIs; the web player's own objects stay untouched.
-  let logBudget = 150;
-  const log = (message) => {
-    if (logBudget-- <= 0) return;
-    const text = typeof message === "string" ? message : JSON.stringify(message);
-    if (native) send("log", "player", text);
-    else console.debug("[spicetify-android:player]", text);
-  };
+  // Playback diagnostics live in diagnostics.js (runs at document start).
+  const diagnostics = () => window.SpicetifyAndroidDiagnostics;
+  const log = (message) => diagnostics()?.log(message);
   const errText = (e) => `${e?.name || "Error"}: ${e?.message || e}`;
-  try {
-    const rmksa = navigator.requestMediaKeySystemAccess?.bind(navigator);
-    if (rmksa) {
-      navigator.requestMediaKeySystemAccess = (keySystem, configs) => {
-        const robustness = (configs || [])
-          .flatMap((c) => [...(c.videoCapabilities || []), ...(c.audioCapabilities || [])])
-          .map((c) => c.robustness)
-          .filter(Boolean);
-        const result = rmksa(keySystem, configs);
-        result.then(
-          (access) => log(`DRM ${keySystem} ok (${[...new Set(robustness)].join(",") || "default"}) -> ${access.keySystem}`),
-          (e) => log(`DRM ${keySystem} unavailable (${[...new Set(robustness)].join(",") || "default"}): ${errText(e)}`),
-        );
-        return result;
-      };
-    }
-    // oxlint-disable-next-line typescript/unbound-method -- re-applied with the session as `this`
-    const update = window.MediaKeySession?.prototype?.update;
-    if (update) {
-      MediaKeySession.prototype.update = function (...args) {
-        const result = update.apply(this, args);
-        result.catch?.((e) => log(`DRM licence rejected: ${errText(e)}`));
-        return result;
-      };
-    }
-    const watched = new WeakSet();
-    const watch = (el) => {
-      if (watched.has(el)) return;
-      watched.add(el);
-      el.addEventListener("error", () => log(`media error ${el.error?.code ?? "?"}: ${el.error?.message || "no message"}`));
-    };
-    // oxlint-disable-next-line typescript/unbound-method -- re-applied with the element as `this`
-    const play = HTMLMediaElement.prototype.play;
-    HTMLMediaElement.prototype.play = function (...args) {
-      watch(this);
-      const result = play.apply(this, args);
-      result?.catch?.((e) => log(`media play() rejected: ${errText(e)}`));
-      return result;
-    };
-  } catch (e) {
-    console.warn("[spicetify-android] playback diagnostics unavailable", e);
-  }
-  const playerSummary = () => {
-    const state = window.Spicetify?.Player?.origin?._state;
-    const connect = window.Spicetify?.Platform?.ConnectAPI?.state;
-    const device = connect?.activeDevice;
-    return {
-      track: state?.item?.uri || null,
-      paused: state ? !!state.isPaused : null,
-      buffering: state?.isBuffering ?? null,
-      device: device ? `${device.name || "?"} (${device.type || "?"}${device.isLocal ? ", local" : ""})` : null,
-      connect: connect?.connectionStatus ?? null,
-      media: [...document.querySelectorAll("audio,video")].map((m) => `${m.tagName.toLowerCase()} paused=${m.paused} ready=${m.readyState}`),
-    };
-  };
-  // A tap on a play control: report what the player did two seconds later.
-  document.addEventListener(
-    "click",
-    (e) => {
-      const control = e.target?.closest?.(
-        '[data-testid="play-button"], [data-testid="control-button-playpause"], [data-testid="tracklist-row"] button, [aria-label][data-encore-id="buttonPrimary"]',
-      );
-      if (!control) return;
-      const name = control.getAttribute("data-testid") || control.getAttribute("aria-label") || control.tagName;
-      const before = JSON.stringify(playerSummary());
-      setTimeout(() => log(`tap ${name}: before ${before} after ${JSON.stringify(playerSummary())}`), 2000);
-    },
-    true,
-  );
-  window.addEventListener("unhandledrejection", (e) => {
-    const r = e.reason;
-    const text = errText(r);
-    if (/play|player|media|drm|licen|widevine|eme|device|connect|esperanto/i.test(`${text} ${r?.stack || ""}`)) log(`unhandled: ${text}`);
-  });
+  const playerSummary = () => diagnostics()?.summary() ?? null;
 
   const imageUrl = (uri) => {
     if (!uri) return "";
@@ -325,6 +243,7 @@
     toggleShuffle: () => Spicetify.Player.toggleShuffle(),
     toggleRepeat: () => Spicetify.Player.toggleRepeat(),
     toggleHeart: () => Spicetify.Player.toggleHeart(),
+    testPlayback: () => diagnostics()?.testPlayback(),
     stop: () => Spicetify.Player.pause(),
     playItem: (itemId) => playItem(itemId),
     playSearch: (query) => playSearch(query),
