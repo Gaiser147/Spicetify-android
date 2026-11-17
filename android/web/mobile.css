@@ -1,3 +1,25 @@
+/* Spicetify manager button in the global nav bar (all layouts). */
+#spicetify-android-manager {
+  display: flex;
+  flex: 0 0 auto;
+  align-self: center;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin-inline: 4px 8px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--spice-subtext, #b3b3b3);
+  cursor: pointer;
+}
+#spicetify-android-manager:hover,
+#spicetify-android-manager:active {
+  color: var(--spice-text, #fff);
+  background: rgba(var(--spice-rgb-text, 255, 255, 255), 0.1);
+}
+
 /* Spicetify Android: mobile layout (active when <html> has .spicetify-android-mobile).
  * Elements are tagged by mobile.js with stable sa-* classes. */
 
@@ -223,4 +245,59 @@ html.spicetify-android-mobile .main-view-container {
 }
 html.spicetify-android-mobile .contentSpacing {
   padding-inline: 12px !important;
+}
+
+/* Custom app links and the Spicetify button move from the top bar to the drawer on phones. */
+#spicetify-android-apps {
+  display: none;
+}
+html.spicetify-android-mobile .custom-navlinks-scrollable_container,
+html.spicetify-android-mobile .custom-navlink,
+html.spicetify-android-mobile #spicetify-android-manager {
+  display: none !important;
+}
+html.spicetify-android-mobile .sa-area-left-sidebar {
+  flex-direction: column !important;
+}
+html.spicetify-android-mobile .sa-area-left-sidebar > nav:not(#spicetify-android-apps) {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+html.spicetify-android-mobile #spicetify-android-apps {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 0 0 auto;
+  margin: 0 0 var(--sa-gap);
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--spice-sidebar, #121212);
+}
+.sa-drawer-app {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--spice-text, #fff);
+  font: inherit;
+  font-weight: 700;
+  text-align: start;
+  cursor: pointer;
+}
+.sa-drawer-app:active {
+  background: rgba(var(--spice-rgb-text, 255, 255, 255), 0.1);
+}
+.sa-drawer-app-icon {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  color: var(--spice-subtext, #b3b3b3);
+}
+.sa-drawer-app-icon svg {
+  width: 100%;
+  height: 100%;
 }

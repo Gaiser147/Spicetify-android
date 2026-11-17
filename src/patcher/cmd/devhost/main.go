@@ -145,6 +145,13 @@ func (h *host) customApp(w http.ResponseWriter, r *http.Request) {
 	app := strings.TrimSuffix(name, ext)
 	dir := "CustomApps/" + app + "/"
 	switch ext {
+	case ".json":
+		manifest, err := h.read(dir + "manifest.json")
+		if err != nil {
+			manifest = []byte("{}")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(manifest)
 	case ".css":
 		css, _ := h.read(dir + "style.css")
 		w.Header().Set("Content-Type", "text/css")

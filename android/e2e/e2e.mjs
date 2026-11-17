@@ -29,7 +29,7 @@ const check = (name, ok, detail = "") => {
 
 // Desktop / tablet sized viewport.
 {
-  const { browser, page, errors, stats } = await openPlayer({ viewport: { width: 1280, height: 800 } });
+  const { browser, page, errors, stats } = await openPlayer({ viewport: { width: 1280, height: 800 } }, { fakeNative: true });
   const state = await page
     .waitForFunction(
       () =>
@@ -67,6 +67,34 @@ const check = (name, ok, detail = "") => {
   check("Theme colors applied", info.colors.startsWith("#"), info.colors);
   check("Android bridge loaded", info.bridge);
   check("PlayerAPI compatibility shim", info.playerShim);
+
+  // Custom app links in the top bar (with names and icons from the manifests).
+  const navLinks = await page
+    .waitForFunction(
+      (expected) => {
+        const labels = [...document.querySelectorAll("#global-nav-bar [aria-label]")].map((e) => e.getAttribute("aria-label"));
+        return expected.every((name) => labels.includes(name)) && labels;
+      },
+      apps.includes("marketplace") ? ["Marketplace", "Lyrics"] : ["Lyrics"],
+      { timeout: 20_000 },
+    )
+    .then((h) => h.jsonValue())
+    .catch(() => null);
+  check("Custom app links in the top bar", !!navLinks, JSON.stringify(navLinks));
+  // Native manager button (Spicetify's own top bar mount does not exist on the web).
+  const manager = await page
+    .waitForSelector("#spicetify-android-manager", { state: "visible", timeout: 10_000 })
+    .then(async (el) => {
+      await el.click();
+      return page.evaluate(() => (window.__nativeMessages || []).some((m) => m.method === "openManager"));
+    })
+    .catch(() => false);
+  check("Spicetify manager button opens the native manager", manager);
+  if (apps.includes("marketplace")) {
+    await page.click('#global-nav-bar [aria-label="Marketplace"]').catch(() => {});
+    await page.waitForTimeout(1500);
+    check("Marketplace link navigates", await page.evaluate(() => location.pathname.startsWith("/marketplace")));
+  }
 
   // Custom app route.
   await page.evaluate(() => window.Spicetify.Platform.History.push("/lyrics-plus"));
@@ -157,7 +185,7 @@ const check = (name, ok, detail = "") => {
 
 // Phone viewport with the mobile layout.
 {
-  const { browser, page, errors } = await openPlayer({ ...devices["Pixel 7"], userAgent: DESKTOP_UA });
+  const { browser, page, errors } = await openPlayer({ ...devices["Pixel 7"], userAgent: DESKTOP_UA }, { fakeNative: true });
   // Spotify reloads the page once on the first visit; wait for the final render.
   const toggle = await page
     .waitForFunction(
@@ -175,8 +203,35 @@ const check = (name, ok, detail = "") => {
     await toggle.click();
     await page.waitForTimeout(800);
     await page.screenshot({ path: join(out, "phone-drawer.png") });
-    await toggle.click();
+    const drawerApps = await page.evaluate(() =>
+      [...document.querySelectorAll("#spicetify-android-apps .sa-drawer-app")].map((b) => {
+        const r = b.getBoundingClientRect();
+        return { label: b.textContent.trim(), visible: r.width > 0 && r.x >= 0 && r.x < innerWidth };
+      }),
+    );
+    check(
+      "Phone: apps and Spicetify listed in the drawer",
+      drawerApps.length >= 2 && drawerApps.every((a) => a.visible) && drawerApps.some((a) => a.label === "Spicetify"),
+      JSON.stringify(drawerApps.map((a) => a.label)),
+    );
+    const lyrics = await page.$('#spicetify-android-apps .sa-drawer-app:has-text("Lyrics")');
+    if (lyrics) {
+      await lyrics.click();
+      await page.waitForTimeout(1500);
+      check(
+        "Phone: drawer app link navigates and closes the drawer",
+        await page.evaluate(() => location.pathname.startsWith("/lyrics-plus") && !document.body.classList.contains("spicetify-android-drawer-open")),
+      );
+      await page.evaluate(() => window.Spicetify.Platform.History.push("/"));
+      await page.waitForTimeout(1000);
+    }
   }
+  const topBarLinks = await page.evaluate(
+    () =>
+      [...document.querySelectorAll("#global-nav-bar .custom-navlink, #spicetify-android-manager")].filter((e) => e.getBoundingClientRect().width > 0)
+        .length,
+  );
+  check("Phone: top bar without app links", topBarLinks === 0, `${topBarLinks} visible`);
   check("Mobile drawer toggle present", !!toggle);
   if (toggle) {
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);

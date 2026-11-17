@@ -75,6 +75,65 @@
     return el;
   };
 
+  // Custom app links and the Spicetify manager: the top bar is too narrow on
+  // phones, so they are listed at the top of the library drawer instead.
+  const manifests = new Map();
+  const loadManifest = (app) => {
+    if (!manifests.has(app)) {
+      manifests.set(
+        app,
+        fetch(`/spicetify-routes-${app}.json`)
+          .then((r) => (r.ok ? r.json() : {}))
+          .catch(() => ({})),
+      );
+    }
+    return manifests.get(app);
+  };
+  const appLabel = (app, manifest) => {
+    let name = manifest?.name;
+    if (name && typeof name === "object") name = name[window.Spicetify?.Locale?.getLocale?.()] || name.en;
+    return name || app.replace(/(^|-)(\w)/g, (_, sep, c) => (sep ? " " : "") + c.toUpperCase());
+  };
+  const drawerItem = (label, onClick) => {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "sa-drawer-app";
+    const icon = document.createElement("span");
+    icon.className = "sa-drawer-app-icon";
+    const text = document.createElement("span");
+    text.textContent = label;
+    item.append(icon, text);
+    item.addEventListener("click", () => {
+      setOpen("drawer", false);
+      onClick();
+    });
+    return { item, icon, text };
+  };
+  const ensureDrawerApps = (drawer) => {
+    if (!drawer || drawer.querySelector("#spicetify-android-apps")) return;
+    const apps = window.Spicetify?.Config?.custom_apps || [];
+    const bridge = window.SpicetifyAndroidBridge;
+    if (!apps.length && !bridge?.hasNative) return;
+    const box = document.createElement("nav");
+    box.id = "spicetify-android-apps";
+    box.setAttribute("aria-label", "Spicetify");
+    for (const app of apps) {
+      const { item, icon, text } = drawerItem(appLabel(app), () => window.Spicetify?.Platform?.History?.push(`/${app}`));
+      loadManifest(app).then((manifest) => {
+        text.textContent = appLabel(app, manifest);
+        if (typeof manifest.icon === "string") icon.innerHTML = manifest.icon;
+      });
+      box.appendChild(item);
+    }
+    if (bridge?.hasNative) {
+      const { item, icon } = drawerItem("Spicetify", () => bridge.openManager());
+      icon.innerHTML =
+        '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0a1.5 1.5 0 0 1 1.5 1.5v.3a6 6 0 0 1 1.7.7l.2-.2a1.5 1.5 0 0 1 2.1 2.1l-.2.2c.3.5.6 1.1.7 1.7h.3a1.5 1.5 0 0 1 0 3h-.3a6 6 0 0 1-.7 1.7l.2.2a1.5 1.5 0 0 1-2.1 2.1l-.2-.2a6 6 0 0 1-1.7.7v.3a1.5 1.5 0 0 1-3 0v-.3a6 6 0 0 1-1.7-.7l-.2.2a1.5 1.5 0 0 1-2.1-2.1l.2-.2a6 6 0 0 1-.7-1.7h-.3a1.5 1.5 0 0 1 0-3h.3c.1-.6.4-1.2.7-1.7l-.2-.2a1.5 1.5 0 0 1 2.1-2.1l.2.2c.5-.3 1.1-.6 1.7-.7v-.3A1.5 1.5 0 0 1 8 0zm0 5a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>';
+      box.appendChild(item);
+    }
+    drawer.prepend(box);
+  };
+
   const AREAS = new Set(["top-banner", "global-nav", "left-sidebar", "main-view", "right-sidebar", "now-playing-bar"]);
 
   const tagLayout = () => {
@@ -87,6 +146,8 @@
       const area = getComputedStyle(child).gridArea?.split("/")[0]?.trim();
       if (AREAS.has(area)) child.classList.add(`sa-area-${area}`);
     }
+
+    ensureDrawerApps(grid.querySelector(".sa-area-left-sidebar"));
 
     const nav = document.getElementById("global-nav-bar") || grid.querySelector(".sa-area-global-nav");
     if (nav && !nav.querySelector("#spicetify-android-drawer-toggle")) nav.prepend(drawerButton());

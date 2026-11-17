@@ -297,6 +297,9 @@
     },
     state: snapshot,
     library,
+    /** Opens the native Spicetify manager (no-op outside the app). */
+    openManager: () => send("openManager"),
+    hasNative: !!native,
   };
 
   const waitFor = (check, cb) => {
@@ -329,14 +332,14 @@
   );
 
   // Native manager entry in the top bar and the profile menu.
+  const managerIcon =
+    '<svg role="img" height="16" width="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0a1.5 1.5 0 0 1 1.5 1.5v.3a6 6 0 0 1 1.7.7l.2-.2a1.5 1.5 0 0 1 2.1 2.1l-.2.2c.3.5.6 1.1.7 1.7h.3a1.5 1.5 0 0 1 0 3h-.3a6 6 0 0 1-.7 1.7l.2.2a1.5 1.5 0 0 1-2.1 2.1l-.2-.2a6 6 0 0 1-1.7.7v.3a1.5 1.5 0 0 1-3 0v-.3a6 6 0 0 1-1.7-.7l-.2.2a1.5 1.5 0 0 1-2.1-2.1l.2-.2a6 6 0 0 1-.7-1.7h-.3a1.5 1.5 0 0 1 0-3h.3c.1-.6.4-1.2.7-1.7l-.2-.2a1.5 1.5 0 0 1 2.1-2.1l.2.2c.5-.3 1.1-.6 1.7-.7v-.3A1.5 1.5 0 0 1 8 0zm0 5a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>';
   waitFor(
     () => window.Spicetify?.Topbar?.Button && Spicetify.Menu?.Item,
     () => {
       if (!native) return;
-      const icon =
-        '<svg role="img" height="16" width="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a1.5 1.5 0 0 1 1.5 1.5v.3a6 6 0 0 1 1.7.7l.2-.2a1.5 1.5 0 0 1 2.1 2.1l-.2.2c.3.5.6 1.1.7 1.7h.3a1.5 1.5 0 0 1 0 3h-.3a6 6 0 0 1-.7 1.7l.2.2a1.5 1.5 0 0 1-2.1 2.1l-.2-.2a6 6 0 0 1-1.7.7v.3a1.5 1.5 0 0 1-3 0v-.3a6 6 0 0 1-1.7-.7l-.2.2a1.5 1.5 0 0 1-2.1-2.1l.2-.2a6 6 0 0 1-.7-1.7h-.3a1.5 1.5 0 0 1 0-3h.3c.1-.6.4-1.2.7-1.7l-.2-.2a1.5 1.5 0 0 1 2.1-2.1l.2.2c.5-.3 1.1-.6 1.7-.7v-.3A1.5 1.5 0 0 1 8 0zm0 5a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>';
       try {
-        new Spicetify.Topbar.Button("Spicetify", icon, () => send("openManager"), false, true);
+        new Spicetify.Topbar.Button("Spicetify", managerIcon, () => send("openManager"), false, true);
       } catch (e) {
         console.warn("[spicetify-android] topbar button failed", e);
       }
@@ -345,6 +348,26 @@
       } catch {}
     },
   );
+
+  // Spicetify's top bar buttons need the desktop client's history/action
+  // buttons, which the web player does not have. Add an own button to the
+  // global nav bar unless a Spicetify top bar button got mounted.
+  const ensureManagerButton = () => {
+    if (!native) return;
+    const nav = document.getElementById("global-nav-bar");
+    if (!nav || document.querySelector(".spicetify-topbar-button") || document.getElementById("spicetify-android-manager")) return;
+    const right = nav.lastElementChild;
+    if (!right) return;
+    const button = document.createElement("button");
+    button.id = "spicetify-android-manager";
+    button.type = "button";
+    button.title = "Spicetify";
+    button.setAttribute("aria-label", "Spicetify");
+    button.innerHTML = managerIcon;
+    button.addEventListener("click", () => send("openManager"));
+    right.prepend(button);
+  };
+  setInterval(ensureManagerButton, 2000);
 
   // Tells the app the player is up (it shows a recovery bar if this never comes).
   waitFor(

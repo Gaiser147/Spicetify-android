@@ -25,7 +25,7 @@ Die offizielle Spotify-App für Android ist nativ geschrieben (Kotlin/Java). Spi
 - **Spotify Connect** wie im Web-Player (als Gerät und zum Fernsteuern).
 - Die Optionen aus `config-xpui.ini` gibt es als Schalter in den Einstellungen: Sentry und Logging deaktivieren, APIs freigeben, Home-, Sidebar- und experimentelle Konfiguration, RTL entfernen.
 
-Den Manager öffnest du über das Zahnrad-Symbol „Spicetify“ in der oberen Leiste des Players oder über den Eintrag im Profilmenü.
+**Custom Apps** wie den Marketplace öffnest du auf dem Tablet über die Symbole neben dem Home-Knopf, also Marketplace (Einkaufswagen), Lyrics (Mikrofon) und New Releases (Glocke). Auf dem Handy findest du sie oben im Seitenmenü (☰ oder von links wischen). Den **Spicetify-Manager** öffnest du über das Zahnrad in der oberen Leiste (Handy: Eintrag „Spicetify“ im Seitenmenü) oder per langem Druck auf das App-Icon.
 
 ### Installation
 
@@ -96,7 +96,7 @@ The official Spotify Android app is native code. Spicetify modifies the web clie
 - **Android Auto:** browse recently played, Liked Songs, playlists and albums, with search, voice requests ("play … on Spicetify"), cover art and playback controls. Keep Spicetify open on the phone. Because the app is sideloaded, enable **Unknown sources** in Android Auto's developer settings (tap "Version" repeatedly to unlock them).
 - All `config-xpui.ini` options are available as switches.
 
-Open the manager from the "Spicetify" button in the player's top bar or from the profile menu.
+Custom apps such as the Marketplace appear next to the Home button on tablets. On phones they are at the top of the library drawer. Open the Spicetify manager with the gear in the top bar (on phones, the "Spicetify" entry in the drawer) or by long-pressing the app icon.
 
 ### Troubleshooting
 
