@@ -131,7 +131,18 @@ const check = (name, ok, detail = "") => {
     )
     .then((h) => h.jsonValue())
     .catch(() => null);
-  check("Custom app links in the top bar", !!navLinks, JSON.stringify(navLinks));
+  check(
+    "Custom app links in the top bar",
+    !!navLinks,
+    JSON.stringify(
+      navLinks ??
+        (await page.evaluate(() => ({
+          path: location.pathname,
+          labels: [...document.querySelectorAll("#global-nav-bar [aria-label]")].map((e) => e.getAttribute("aria-label")),
+          navlinks: document.querySelectorAll(".custom-navlink").length,
+        }))),
+    ),
+  );
   // Native manager button (Spicetify's own top bar mount does not exist on the web).
   const manager = await page
     .waitForSelector("#spicetify-android-manager", { state: "visible", timeout: 10_000 })
@@ -234,7 +245,7 @@ const check = (name, ok, detail = "") => {
       request: all.some((m) => m.startsWith("[player-net] GET open.spotify.com/robots.txt -> 200")),
       websocket: all.some((m) => m.includes("ws connecting dealer.spotify.com")),
       test: all.some((m) => /test: (\w+\(\) resolved|player call rejected)/.test(m)),
-      environment: all.some((m) => m.startsWith("[player] environment")),
+      environment: all.some((m) => m.startsWith("[player] environment")) && all.some((m) => m.startsWith("[player] media support")),
       // Logged out the web player may not create its local player.
       harmony: all.some((m) => m.startsWith("[player] harmony hooked")) || !window.Spicetify?.Platform?.PlayerAPI?._harmony,
       sample: all.filter((m) => /tap|test:|ws |harmony/.test(m)).map((m) => m.slice(0, 200)),

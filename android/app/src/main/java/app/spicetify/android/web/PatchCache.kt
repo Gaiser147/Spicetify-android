@@ -39,7 +39,9 @@ class PatchCache(private val dir: File, private val maxBytes: Long = 96L * 1024 
 
     @Synchronized
     private fun trim() {
-        val files = dir.listFiles()?.sortedBy { it.lastModified() } ?: return
+        // Read each timestamp once: sorting on lastModified() directly breaks
+        // the comparator contract while other threads write to the cache.
+        val files = dir.listFiles()?.map { it to it.lastModified() }?.sortedBy { it.second }?.map { it.first } ?: return
         var total = files.sumOf { it.length() }
         for (f in files) {
             if (total <= maxBytes) break

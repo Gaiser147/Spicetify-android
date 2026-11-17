@@ -62,6 +62,26 @@
     log(`${method} ${short(u)} -> ${status} (${Math.round(performance.now() - started)} ms)`, "player-net");
   };
 
+  // Device registration and Connect commands: request and response bodies
+  // show the capabilities the web player reports and what the server answers.
+  // Credential-like fields are removed.
+  const BODY_PATH = /track-playback\/v1\/devices|connect-state\/v1\/devices|connect\/transfer|player\/command/;
+  const SECRET_KEY = /token|auth|secret|password|cookie/i;
+  const scrub = (body) => {
+    if (body == null || body === "") return "-";
+    if (typeof body !== "string") {
+      const size = body.byteLength ?? body.size ?? body.length;
+      return `[${body.constructor?.name || typeof body}${size != null ? ` ${size} bytes` : ""}]`;
+    }
+    try {
+      return JSON.stringify(JSON.parse(body), (k, v) => (k && SECRET_KEY.test(k) ? "[removed]" : v)).slice(0, 1500);
+    } catch {
+      return body.replace(/[\w-]{60,}/g, "[…]").slice(0, 1500);
+    }
+  };
+  const logBodies = (method, u, requestBody, status, responseText) =>
+    log(`${method} ${short(u)} ${status} request ${scrub(requestBody)} response ${scrub(responseText)}`, "player-body");
+
   guard("fetch", () => {
     const fetch = window.fetch;
     if (typeof fetch !== "function") return;
@@ -86,6 +106,12 @@
                 .then((t) => log(`remote config ${res.status} (property set ${set}): ${t.slice(0, 300)}`, "player-net"))
                 .catch(() => {});
             }
+          } else if (BODY_PATH.test(u.pathname)) {
+            res
+              .clone()
+              .text()
+              .then((t) => logBodies(method, u, init?.body ?? null, res.status, t))
+              .catch(() => {});
           } else if (!res.ok && /track-playback|connect-state/.test(u.pathname)) {
             res
               .clone()
@@ -112,11 +138,24 @@
       if (u) meta.set(this, { method: String(method).toUpperCase(), u });
       return open.apply(this, arguments);
     };
-    proto.send = function () {
+    proto.send = function (body) {
       const m = meta.get(this);
       if (m) {
         const started = performance.now();
-        this.addEventListener("loadend", () => net(m.method, m.u, this.status || "failed", started), { once: true });
+        this.addEventListener(
+          "loadend",
+          () => {
+            net(m.method, m.u, this.status || "failed", started);
+            if (BODY_PATH.test(m.u.pathname)) {
+              let text = null;
+              try {
+                text = this.responseType === "" || this.responseType === "text" ? this.responseText : JSON.stringify(this.response);
+              } catch {}
+              logBodies(m.method, m.u, body ?? null, this.status || "failed", text);
+            }
+          },
+          { once: true },
+        );
       }
       return send.apply(this, arguments);
     };
@@ -133,21 +172,32 @@
         const u = parse(url);
         if (!u) return;
         const name = short(u);
+        let opened = performance.now();
+        let received = 0;
+        const age = () => `${((performance.now() - opened) / 1000).toFixed(1)} s`;
         log(`ws connecting ${name}`, "player-net");
-        this.addEventListener("open", () => log(`ws open ${name}`, "player-net"));
-        this.addEventListener("error", () => log(`ws error ${name}`, "player-net"));
-        this.addEventListener("close", (e) => log(`ws closed ${name} code=${e.code} clean=${e.wasClean} ${e.reason || ""}`, "player-net"));
+        this.addEventListener("open", () => {
+          opened = performance.now();
+          log(`ws open ${name}`, "player-net");
+        });
+        this.addEventListener("error", () => log(`ws error ${name} after ${age()}`, "player-net"));
+        this.addEventListener("close", (e) =>
+          log(`ws closed ${name} code=${e.code} clean=${e.wasClean} after ${age()}, ${received} messages ${e.reason || ""}`, "player-net"),
+        );
         this.addEventListener("message", (e) => {
+          received++;
           let what = typeof e.data === "string" ? "text" : "binary";
           try {
             const m = JSON.parse(e.data);
             what = [m.type, m.uri, m.message_ident, m.key].filter(Boolean).join(" ") || "json";
           } catch {}
-          // The first messages of a connection (connection id, cluster) always,
-          // later ones only while watching.
+          const size = typeof e.data === "string" ? e.data.length : (e.data?.byteLength ?? e.data?.size ?? "?");
+          // Every message of the first two minutes of a connection (connection
+          // id, cluster updates, commands), later ones only while watching.
           if (what === "pong" && !watching()) return;
-          if (dealerMessages++ >= 30 && (!watching() || watchMessages++ > 15)) return;
-          log(`ws message ${name}: ${what.slice(0, 160)}`, "player-net");
+          const early = performance.now() - opened < 120_000 && dealerMessages++ < 80;
+          if (!early && (!watching() || watchMessages++ > 15)) return;
+          log(`ws message ${name} +${age()} ${size} B: ${what.slice(0, 160)}`, "player-net");
         });
       }
     }
@@ -470,6 +520,33 @@
   };
 
   log(`environment ${JSON.stringify(environment())}`);
+  // Formats the web player (and its ads) use; reported once per page.
+  setTimeout(async () => {
+    const types = [
+      'audio/mp4; codecs="mp4a.40.2"',
+      'audio/mp4; codecs="flac"',
+      'audio/webm; codecs="opus"',
+      'audio/ogg; codecs="vorbis"',
+      "audio/mpeg",
+      'video/mp4; codecs="avc1.42E01E"',
+    ];
+    const support = {};
+    const audio = document.createElement("audio");
+    for (const type of types) {
+      support[type] = `mse=${window.MediaSource?.isTypeSupported?.(type) ?? "-"} play=${audio.canPlayType(type) || "no"}`;
+    }
+    try {
+      const info = await navigator.mediaCapabilities?.decodingInfo?.({
+        type: "media-source",
+        audio: { contentType: 'audio/mp4; codecs="mp4a.40.2"' },
+        keySystemConfiguration: { keySystem: "com.widevine.alpha", audio: { robustness: "SW_SECURE_CRYPTO" } },
+      });
+      if (info) support.widevineDecoding = `supported=${info.supported} smooth=${info.smooth} efficient=${info.powerEfficient}`;
+    } catch (e) {
+      support.widevineDecoding = errText(e);
+    }
+    log(`media support ${JSON.stringify(support)}`);
+  }, 1500);
   hookPlayer();
   window.SpicetifyAndroidDiagnostics = { log, summary, details, environment, testPlayback, watch };
 })();
