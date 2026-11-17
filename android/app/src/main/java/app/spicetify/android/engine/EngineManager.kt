@@ -89,7 +89,10 @@ class EngineManager(
      * in safe mode, the only script added to the page.
      */
     fun baseScript(): String =
-        files.readText("android/diagnostics.js").orEmpty() + "\n" + files.readText("android/migrate.js").orEmpty()
+        "window.__spicetifyAndroidNativeSockets=${configRepository.current.nativeDealer};\n" +
+            files.readText("android/diagnostics.js").orEmpty() + "\n" +
+            files.readText("android/sockets.js").orEmpty() + "\n" +
+            files.readText("android/migrate.js").orEmpty()
 
     fun patchAsset(url: String, content: String): String = current().engine.patchAsset(url, content)
 

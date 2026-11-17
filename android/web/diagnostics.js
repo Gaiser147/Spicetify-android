@@ -110,6 +110,31 @@
     );
   };
 
+  // Which access token each channel uses, as a short SHA-256 fingerprint
+  // (never the token): the dealer WebSocket must belong to the same session
+  // as the API requests, or the server pushes commands elsewhere.
+  const seenTokens = new Map();
+  const tokenFingerprint = async (token) => {
+    const bytes = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token)));
+    return Array.from(bytes.slice(0, 4), (b) => b.toString(16).padStart(2, "0")).join("");
+  };
+  const noteToken = (raw, where) => {
+    if (!raw || typeof raw !== "string") return;
+    const token = raw.replace(/^Bearer\s+/i, "");
+    if (seenTokens.has(token) || seenTokens.size > 20) return;
+    seenTokens.set(token, where);
+    tokenFingerprint(token)
+      .then((fp) => log(`token ${fp} first used by ${where}`, "player-net"))
+      .catch(() => {});
+  };
+  const headerValue = (headers, name) => {
+    if (!headers) return undefined;
+    if (typeof headers.get === "function") return headers.get(name) ?? undefined;
+    if (Array.isArray(headers)) return headers.find(([k]) => String(k).toLowerCase() === name)?.[1];
+    const key = Object.keys(headers).find((k) => k.toLowerCase() === name);
+    return key ? headers[key] : undefined;
+  };
+
   guard("fetch", () => {
     const fetch = window.fetch;
     if (typeof fetch !== "function") return;
@@ -119,6 +144,19 @@
       if (!u) return result;
       const method = String(init?.method || input?.method || "GET").toUpperCase();
       const started = performance.now();
+      noteToken(headerValue(init?.headers, "authorization") ?? headerValue(input?.headers, "authorization"), `${method} ${short(u)}`);
+      if (u.pathname.endsWith("/api/token")) {
+        result
+          .then((res) => res.clone().json())
+          .then((j) => {
+            log(
+              `api/token: anonymous=${j?.isAnonymous} client=${String(j?.clientId || "-").slice(0, 8)} expires=${j?.accessTokenExpirationTimestampMs || "-"}`,
+              "player-net",
+            );
+            noteToken(j?.accessToken, "api/token response");
+          })
+          .catch(() => {});
+      }
       result.then(
         (res) => {
           net(method, u, res.status, started);
@@ -166,6 +204,13 @@
       if (u) meta.set(this, { method: String(method).toUpperCase(), u });
       return open.apply(this, arguments);
     };
+    // oxlint-disable-next-line typescript/unbound-method -- re-applied with the request as `this`
+    const setRequestHeader = proto.setRequestHeader;
+    proto.setRequestHeader = function (name, value) {
+      const m = meta.get(this);
+      if (m && String(name).toLowerCase() === "authorization") noteToken(value, `${m.method} ${short(m.u)}`);
+      return setRequestHeader.apply(this, arguments);
+    };
     proto.send = function (body) {
       const m = meta.get(this);
       if (m) {
@@ -200,6 +245,7 @@
         const u = parse(url);
         if (!u) return;
         const name = short(u);
+        noteToken(u.searchParams.get("access_token"), `WebSocket ${name}`);
         let opened = performance.now();
         let received = 0;
         const age = () => `${((performance.now() - opened) / 1000).toFixed(1)} s`;

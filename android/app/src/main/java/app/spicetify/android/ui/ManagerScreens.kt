@@ -500,6 +500,7 @@ fun SettingsScreen(modifier: Modifier, snackbar: SnackbarHostState, openDiagnost
         SwitchRow(stringResource(R.string.opt_disable_logging), config.disableLogging) { v -> updateConfig(context) { it.copy(disableLogging = v) } }
         SwitchRow(stringResource(R.string.opt_remove_rtl), config.removeRtl) { v -> updateConfig(context) { it.copy(removeRtl = v) } }
         SwitchRow(stringResource(R.string.opt_external_links), config.externalLinksInBrowser) { v -> updateConfig(context) { it.copy(externalLinksInBrowser = v) } }
+        SwitchRow(stringResource(R.string.opt_native_dealer), config.nativeDealer) { v -> updateConfig(context) { it.copy(nativeDealer = v) } }
 
         SectionHeader(stringResource(R.string.maintenance))
         ListItem(
