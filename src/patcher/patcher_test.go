@@ -156,10 +156,25 @@ func TestLiveWebPlayer(t *testing.T) {
 		"Spicetify.Tippy=",
 		"spicetify-routes-lyrics-plus",
 		`path:"/lyrics-plus/*"`,
+		`Spicetify._renderNavLinks(["lyrics-plus"], true),(0,`,
 	} {
 		if !strings.Contains(all, want) {
 			t.Errorf("patched web player is missing %q", want)
 		}
 	}
 	t.Logf("report: %s", p.Report())
+}
+
+func TestIsCustomAppManifest(t *testing.T) {
+	for path, want := range map[string]string{
+		"/spicetify-routes-marketplace.json":         "marketplace",
+		"/intl-de/spicetify-routes-lyrics-plus.json": "lyrics-plus",
+	} {
+		if app, ok := IsCustomAppManifest(path); !ok || app != want {
+			t.Errorf("IsCustomAppManifest(%q) = %q, %v", path, app, ok)
+		}
+	}
+	if _, ok := IsCustomAppManifest("/spicetify-routes-x.js"); ok {
+		t.Error("js chunk must not be a manifest")
+	}
 }

@@ -84,8 +84,10 @@ export async function startHarness({ out, marketplace = "", apps: baseApps = ["l
    * @param {{preinstallServiceWorker?: boolean}} [options] preinstallServiceWorker:
    *   first load Spotify without Spicetify so its service worker caches the
    *   original bundles (like an existing install), then load with Spicetify.
+   *   fakeNative: provide a stand-in for the app's SpicetifyAndroid bridge that
+   *   records messages in window.__nativeMessages.
    */
-  async function openPlayer(contextOptions = {}, { preinstallServiceWorker = false } = {}) {
+  async function openPlayer(contextOptions = {}, { preinstallServiceWorker = false, fakeNative = false } = {}) {
     const browser = await chromium.launch();
     const context = await browser.newContext({ userAgent: DESKTOP_UA, locale: "en-US", ...contextOptions });
     const errors = [];
@@ -116,6 +118,11 @@ export async function startHarness({ out, marketplace = "", apps: baseApps = ["l
       stats.navigations = 0;
     }
 
+    if (fakeNative) {
+      await context.addInitScript({
+        content: `window.SpicetifyAndroid = { postMessage: (m) => (window.__nativeMessages = window.__nativeMessages || []).push(JSON.parse(m)) };`,
+      });
+    }
     await context.addInitScript({ content: boot });
     // Requests can still be in flight when the browser closes; their errors
     // must not crash the run.
@@ -147,6 +154,15 @@ export async function startHarness({ out, marketplace = "", apps: baseApps = ["l
         delete headers["content-length"];
         delete headers["content-encoding"];
         return route.fulfill({ status: response.status(), headers, body: patched });
+      }),
+    );
+    // Custom app manifests, fetched relative to the page (nav link names and icons).
+    await context.route(
+      /^https:\/\/open\.spotify\.com\/(?:.*\/)?spicetify-routes-[^/]+\.json(?:\?.*)?$/,
+      safe(async (route) => {
+        const app = new URL(route.request().url()).pathname.match(/spicetify-routes-(.+)\.json$/)[1];
+        const r = await fetch(`${hostUrl}/custom-app/${app}.json`);
+        return route.fulfill({ status: r.status, body: await r.text(), headers: { "content-type": "application/json" } });
       }),
     );
     await context.route(

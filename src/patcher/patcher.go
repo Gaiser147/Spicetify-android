@@ -252,6 +252,11 @@ func (p *Patcher) patchAdditional(content string, applied []string) (string, []s
 	if len(p.cfg.CustomApps) > 0 && apply.SupportsCustomAppInjection(content) {
 		content = apply.PatchCustomApp(content, p.flags)
 		applied = append(applied, "customApps")
+		before := content
+		content = patchWebNavLinks(content, p.cfg.CustomApps)
+		if before != content {
+			applied = append(applied, "webNavLinks")
+		}
 	}
 	if p.cfg.ExpFeatures {
 		before := content
@@ -276,6 +281,36 @@ func (p *Patcher) patchAdditional(content string, applied []string) (string, []s
 	}
 	return content, applied
 }
+
+// webHomeButtonRe matches the web player's home button followed by the search
+// field in the global nav bar.
+var webHomeButtonRe = regexp.MustCompile(`(\(0,([\w$]+)\.jsx\)\([\w$]+,\{className:"[\w-]+"\}\))(,\(0,[\w$]+\.jsx\)\([\w$.]+,\{value:"search")`)
+
+// patchWebNavLinks adds the custom app links next to the home button. The
+// desktop patch (apply.insertNavLink) puts them into a block the web player
+// only renders in the desktop client.
+func patchWebNavLinks(content string, apps []string) string {
+	if len(webHomeButtonRe.FindAllStringIndex(content, 2)) != 1 {
+		return content
+	}
+	names, _ := json.Marshal(apps)
+	return webHomeButtonRe.ReplaceAllStringFunc(content, func(m string) string {
+		sub := webHomeButtonRe.FindStringSubmatch(m)
+		return sub[1] + ",Spicetify._renderNavLinks(" + string(names) + ", true)" + sub[3]
+	})
+}
+
+// IsCustomAppManifest reports whether the URL path requests a custom app's
+// manifest (spicetify-routes-<app>.json, fetched relative to the page).
+func IsCustomAppManifest(urlPath string) (app string, ok bool) {
+	m := customAppManifestRe.FindStringSubmatch(path.Base(urlPath))
+	if m == nil {
+		return "", false
+	}
+	return m[1], true
+}
+
+var customAppManifestRe = regexp.MustCompile(`^spicetify-routes-(.+)\.json$`)
 
 // Report returns, as JSON, which patch groups were applied to which asset.
 func (p *Patcher) Report() string {

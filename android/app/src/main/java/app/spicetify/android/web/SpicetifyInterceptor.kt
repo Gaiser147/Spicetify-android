@@ -49,6 +49,7 @@ class SpicetifyInterceptor(
             when {
                 url.host == CDN_HOST && url.path?.startsWith(CDN_PATH) == true -> cdnAsset(request)
                 url.host == WEB_HOST && url.path?.startsWith(EngineManager.BASE_PATH) == true -> spicetifyFile(url)
+                url.host == WEB_HOST && MANIFEST_RE.containsMatchIn(url.path.orEmpty()) -> customAppManifest(url)
                 injectIntoDocument && request.isForMainFrame && url.host == WEB_HOST -> document(request)
                 else -> null
             }
@@ -115,6 +116,12 @@ class SpicetifyInterceptor(
         return ok(res, cors = false, cache = false)
     }
 
+    /** Custom app manifest (nav link name and icon), requested relative to the page. */
+    private fun customAppManifest(url: Uri): WebResourceResponse {
+        val app = MANIFEST_RE.find(url.path.orEmpty())?.groupValues?.get(1) ?: return notFound()
+        return ok(SpicetifyResource("application/json", engine.customAppManifest(app)), cors = false, cache = false)
+    }
+
     /** Fallback: fetch the HTML ourselves and add the boot script to <head>. */
     private fun document(request: WebResourceRequest): WebResourceResponse? {
         val accept = request.requestHeaders["Accept"].orEmpty()
@@ -161,6 +168,8 @@ class SpicetifyInterceptor(
 
     companion object {
         private const val TAG = "SpicetifyInterceptor"
+
+        private val MANIFEST_RE = Regex("/spicetify-routes-([^/]+)\\.json$")
 
         /** The web player's service worker; it would cache unpatched bundles. */
         fun isServiceWorkerScript(url: Uri): Boolean =

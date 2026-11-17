@@ -117,6 +117,10 @@ class EngineManager(
         return Spicengine.userCSS(themeCss, snippets.toString())
     }
 
+    /** A custom app's manifest.json ("{}" if it has none). */
+    fun customAppManifest(app: String): ByteArray =
+        files.readBytes("CustomApps/$app/manifest.json") ?: "{}".toByteArray()
+
     /** Builds the spicetify-routes-<app> chunk (js) or its stylesheet (css). */
     fun customAppAsset(app: String, ext: String): SpicetifyResource? {
         val dir = "CustomApps/$app/"
