@@ -226,6 +226,41 @@ const check = (name, ok, detail = "") => {
       await page.waitForTimeout(1000);
     }
   }
+  // Marketplace cards: the install button must be visible and tappable on touch
+  // screens (real cards need the GitHub API, so a card with the same markup is used).
+  const install = await page.evaluate(() => {
+    const card = (html) => {
+      const el = document.createElement("div");
+      el.style.cssText = "position:fixed;left:20px;top:200px;width:200px;z-index:99999";
+      el.innerHTML = html;
+      // Inside #main: the page does not render stray children of <body>.
+      (document.querySelector("#main") || document.body).appendChild(el);
+      return el;
+    };
+    const grid = card(
+      '<div class="marketplace-grid" style="display:block"><div class="main-card-card" style="width:180px;height:240px;position:relative"><div class="main-card-PlayButtonContainer"><button class="marketplace-installButton" style="width:40px;height:40px">+</button></div></div></div>',
+    );
+    const button = grid.querySelector("button");
+    let clicked = false;
+    button.addEventListener("click", () => (clicked = true));
+    const style = getComputedStyle(grid.querySelector(".main-card-PlayButtonContainer"));
+    const result = { display: style.display, opacity: style.opacity, pointerEvents: style.pointerEvents };
+    const rect = button.getBoundingClientRect();
+    result.width = rect.width;
+    document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)?.click();
+    result.clicked = clicked;
+    grid.remove();
+    // Control: Spotify's own card play buttons stay hidden on touch screens.
+    const plain = card('<div class="main-card-card"><div class="main-card-PlayButtonContainer"><button>x</button></div></div>');
+    result.plainCardDisplay = getComputedStyle(plain.querySelector(".main-card-PlayButtonContainer")).display;
+    plain.remove();
+    return result;
+  });
+  check(
+    "Phone: Marketplace install button visible and tappable",
+    install.display !== "none" && install.opacity === "1" && install.width > 0 && install.clicked && install.plainCardDisplay === "none",
+    JSON.stringify(install),
+  );
   const topBarLinks = await page.evaluate(
     () =>
       [...document.querySelectorAll("#global-nav-bar .custom-navlink, #spicetify-android-manager")].filter((e) => e.getBoundingClientRect().width > 0)
