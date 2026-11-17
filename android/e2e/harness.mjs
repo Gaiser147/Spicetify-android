@@ -125,6 +125,7 @@ export async function startHarness({ out, marketplace = "", apps: baseApps = ["l
     }
     // Like EngineManager.documentStartScript(): diagnostics first, then Spicetify.
     await context.addInitScript({ path: join(repo, "android/web/diagnostics.js") });
+    await context.addInitScript({ path: join(repo, "android/web/migrate.js") });
     await context.addInitScript({ content: boot });
     // Requests can still be in flight when the browser closes; their errors
     // must not crash the run.

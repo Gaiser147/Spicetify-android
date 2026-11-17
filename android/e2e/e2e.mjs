@@ -48,6 +48,38 @@ const check = (name, ok, detail = "") => {
   check("No page reload on first start", stats.navigations === 1, `${stats.navigations} navigation(s)`);
   const sw = await page.evaluate(() => ({ api: "serviceWorker" in navigator, controller: !!globalThis.navigator.serviceWorker?.controller }));
   check("Service worker disabled", !sw.api && !sw.controller, JSON.stringify(sw));
+
+  // The remote config request carries a hash of all property definitions;
+  // the web player does not play without its remote config. It must still
+  // resolve after a reload (stored experimental feature values must not
+  // change the definitions), and stale stored state is cleaned up once.
+  {
+    const configs = [];
+    const onResponse = (r) => {
+      if (/remote-config-resolver/.test(r.url())) {
+        configs.push({ status: r.status(), set: (r.request().postData() || "").match(/"propertySetId"\s*:\s*"(\w+)"/)?.[1] });
+      }
+    };
+    page.on("response", onResponse);
+    await page.evaluate(() => {
+      localStorage.removeItem("spicetify-android:migration");
+      localStorage.setItem("anonymous:remote-config-overrides", '{"stale":true}');
+    });
+    // First reload: the cleanup runs. Second reload: the experimental
+    // features helper has stored values again (the old helper broke here).
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await waitForStablePage(page);
+    const migrated = await page.evaluate(() => localStorage.getItem("anonymous:remote-config-overrides") !== '{"stale":true}');
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await waitForStablePage(page);
+    await page.waitForTimeout(3000);
+    page.off("response", onResponse);
+    check(
+      "Remote config resolves after reload, stale overrides removed",
+      configs.length > 0 && configs.every((c) => c.status === 200) && migrated,
+      JSON.stringify({ configs, migrated }),
+    );
+  }
   const info = await page.evaluate(() => ({
     config: window.Spicetify?.Config,
     platformKeys: Object.keys(window.Spicetify?.Platform || {}).length,

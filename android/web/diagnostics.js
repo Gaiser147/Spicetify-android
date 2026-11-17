@@ -71,12 +71,18 @@
       result.then(
         (res) => {
           net(method, u, res.status, started);
-          if (!res.ok && /remote-config-resolver/.test(u.pathname)) {
-            res
-              .clone()
-              .text()
-              .then((t) => log(`remote config ${res.status}: ${t.slice(0, 300)}`, "player-net"))
-              .catch(() => {});
+          // Without its remote config the web player does not play.
+          if (/remote-config-resolver/.test(u.pathname)) {
+            const body = typeof init?.body === "string" ? init.body : "";
+            const set = body.match(/"propertySetId"\s*:\s*"(\w+)"/)?.[1] ?? "?";
+            if (res.ok) log(`remote config ${res.status} (property set ${set})`, "player-net");
+            else {
+              res
+                .clone()
+                .text()
+                .then((t) => log(`remote config ${res.status} (property set ${set}): ${t.slice(0, 300)}`, "player-net"))
+                .catch(() => {});
+            }
           }
         },
         (e) => net(method, u, `failed (${errText(e)})`, started),

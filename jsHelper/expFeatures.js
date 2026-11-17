@@ -15,9 +15,25 @@
     prevSessionOverrideList = [];
   }
 
+  // Web player (Android port): the remote config request carries a hash of
+  // all property definitions (property set id). Changing a property's default
+  // changes that hash and the server answers 404, so the web player runs
+  // without its remote config (playback never starts). There, overrides are
+  // only applied through RemoteConfigDebugAPI and defaults stay untouched.
+  const isWebPlayer = Spicetify.Config?.platform === "android";
+
   Spicetify.expFeatureOverride = (feature) => {
     hooksPatched = true;
     newFeatures.push(feature.name);
+
+    if (isWebPlayer) {
+      if (!overrideList[feature.name] && (feature.type === "enum" || feature.type === "bool")) {
+        overrideList[feature.name] = { description: feature.description, value: feature.default };
+        if (feature.type === "enum") overrideList[feature.name].values = feature.values;
+        localStorage.setItem("spicetify-exp-features", JSON.stringify(overrideList));
+      }
+      return feature;
+    }
 
     switch (feature.type) {
       case "enum":
@@ -308,8 +324,9 @@ ${Spicetify.SVGIcons.search}
 
         featureMap[name] = currentValue;
         // Records the current value; nothing changes, so no side effects
-        // (they reload the web player on its first start).
-        setOverrides({ [name]: currentValue }, { runEffects: false });
+        // (they reload the web player on its first start). The web player
+        // keeps following its remote config instead of pinning every value.
+        if (!isWebPlayer) setOverrides({ [name]: currentValue }, { runEffects: false });
       }
 
       const feature = overrideList[name];
