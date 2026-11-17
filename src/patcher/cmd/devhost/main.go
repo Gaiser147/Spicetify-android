@@ -46,6 +46,7 @@ func main() {
 	extra := flag.String("extra-scripts", "android/bridge.js,android/mobile.js", "extra scripts below /__spicetify/")
 	styles := flag.String("extra-styles", "android/mobile.css", "extra stylesheets below /__spicetify/")
 	cssMap := flag.String("css-map", "", "css map JSON file")
+	overrides := flag.String("config", "", `JSON merged into the patcher config, e.g. {"expFeatures":false}`)
 	flag.Parse()
 
 	h := &host{root: *root, theme: *theme, scheme: *scheme}
@@ -63,6 +64,11 @@ func main() {
 		_ = json.Unmarshal([]byte(patcher.CustomAppExtensionFiles(string(manifest))), &files)
 		if len(files) > 0 {
 			cfg.CustomAppExtensions[app] = files
+		}
+	}
+	if *overrides != "" {
+		if err := json.Unmarshal([]byte(*overrides), &cfg); err != nil {
+			log.Fatalf("invalid -config: %v", err)
 		}
 	}
 	cfgJSON, _ := json.Marshal(cfg)

@@ -346,5 +346,17 @@
     },
   );
 
-  send("onBridgeReady", JSON.stringify({ version: window.Spicetify?.Config?.version || "" }));
+  // Tells the app the player is up (it shows a recovery bar if this never comes).
+  waitFor(
+    () => window.Spicetify?.Platform?.History && document.querySelector("#main-view"),
+    () =>
+      send(
+        "onBridgeReady",
+        JSON.stringify({
+          version: window.Spicetify?.Config?.version || "",
+          platformApis: Object.keys(window.Spicetify?.Platform || {}).length,
+          react: !!window.Spicetify?.React,
+        }),
+      ),
+  );
 })();

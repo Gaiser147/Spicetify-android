@@ -1,6 +1,11 @@
 package app.spicetify.android
 
 import android.app.Application
+import android.content.Intent
+import androidx.core.content.pm.ShortcutInfoCompat
+import androidx.core.content.pm.ShortcutManagerCompat
+import androidx.core.graphics.drawable.IconCompat
+import app.spicetify.android.ui.ManagerActivity
 import app.spicetify.android.data.ConfigRepository
 import app.spicetify.android.data.SpicetifyFiles
 import app.spicetify.android.engine.EngineManager
@@ -40,6 +45,19 @@ class SpicetifyApp : Application() {
             .readTimeout(60, TimeUnit.SECONDS)
             .build()
         interceptor = SpicetifyInterceptor(engine, patchCache, http, userAgent)
+        publishShortcuts()
+    }
+
+    /** Long-press shortcut to the settings, reachable even if the player is blank. */
+    private fun publishShortcuts() {
+        runCatching {
+            val shortcut = ShortcutInfoCompat.Builder(this, "settings")
+                .setShortLabel(getString(R.string.shortcut_settings))
+                .setIcon(IconCompat.createWithResource(this, R.drawable.ic_launcher_foreground))
+                .setIntent(Intent(this, ManagerActivity::class.java).setAction(Intent.ACTION_VIEW))
+                .build()
+            ShortcutManagerCompat.setDynamicShortcuts(this, listOf(shortcut))
+        }
     }
 }
 

@@ -84,6 +84,10 @@ export async function startHarness({ out, marketplace = "", apps: baseApps = ["l
     const context = await browser.newContext({ userAgent: DESKTOP_UA, locale: "en-US", ...contextOptions });
     const errors = [];
     const page = await context.newPage();
+    const stats = { navigations: 0 };
+    page.on("framenavigated", (frame) => {
+      if (frame === page.mainFrame()) stats.navigations += 1;
+    });
     page.on("pageerror", (e) => errors.push(`[pageerror] ${e.stack || e}`));
     page.on("response", (r) => {
       if (r.status() >= 400) errors.push(`[http ${r.status()}] ${r.url()}`);
@@ -147,7 +151,7 @@ export async function startHarness({ out, marketplace = "", apps: baseApps = ["l
 
     await page.goto("https://open.spotify.com/", { waitUntil: "domcontentloaded", timeout: 90_000 });
     await waitForStablePage(page);
-    return { browser, context, page, errors };
+    return { browser, context, page, errors, stats };
   }
 
   const report = async () => (await fetch(`${hostUrl}/report`)).text();

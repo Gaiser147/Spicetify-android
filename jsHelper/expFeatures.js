@@ -138,7 +138,9 @@
     }
 
     let remoteConfiguration = Spicetify.RemoteConfigResolver?.value.remoteConfiguration || Spicetify.Platform?.RemoteConfiguration;
-    const setOverrides = async (overrides) => {
+    // runEffects: let Spotify apply side effects of the change. The web player
+    // (Android port) reloads the page for some of them.
+    const setOverrides = async (overrides, { runEffects = true } = {}) => {
       const remoteConfigDebugAPI = Spicetify.Platform?.RemoteConfigDebugAPI;
 
       if (remoteConfigDebugAPI?.getProperties && (remoteConfigDebugAPI.setOverrides || remoteConfigDebugAPI.setOverride)) {
@@ -156,7 +158,7 @@
         if (overrideEntries.length === 0) return;
 
         if (remoteConfigDebugAPI.setOverrides) {
-          await remoteConfigDebugAPI.setOverrides(overrideEntries, { autoRunOverrideEffects: true });
+          await remoteConfigDebugAPI.setOverrides(overrideEntries, { autoRunOverrideEffects: runEffects });
           return;
         }
 
@@ -165,7 +167,9 @@
         for (const override of overrideEntries) {
           if (acceptsEntry) {
             try {
-              await remoteConfigDebugAPI.setOverride(override, { autoRunOverrideEffects: override.ref.localValue !== override.value });
+              await remoteConfigDebugAPI.setOverride(override, {
+                autoRunOverrideEffects: runEffects && override.ref.localValue !== override.value,
+              });
               continue;
             } catch {
               acceptsEntry = false;
@@ -303,7 +307,9 @@ ${Spicetify.SVGIcons.search}
         localStorage.setItem("spicetify-exp-features", JSON.stringify(overrideList));
 
         featureMap[name] = currentValue;
-        setOverrides({ [name]: currentValue });
+        // Records the current value; nothing changes, so no side effects
+        // (they reload the web player on its first start).
+        setOverrides({ [name]: currentValue }, { runEffects: false });
       }
 
       const feature = overrideList[name];
