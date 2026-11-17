@@ -65,7 +65,7 @@
   // Device registration and Connect commands: request and response bodies
   // show the capabilities the web player reports and what the server answers.
   // Credential-like fields are removed.
-  const BODY_PATH = /track-playback\/v1\/devices|connect-state\/v1\/devices|connect\/transfer|player\/command/;
+  const BODY_PATH = /track-playback\/v1\/devices|connect-state\/v1\/devices|connect-state\/v1\/cluster|connect\/transfer|player\/command/;
   const SECRET_KEY = /token|auth|secret|password|cookie/i;
   const scrub = (body) => {
     if (body == null || body === "") return "-";
@@ -79,8 +79,36 @@
       return body.replace(/[\w-]{60,}/g, "[…]").slice(0, 1500);
     }
   };
-  const logBodies = (method, u, requestBody, status, responseText) =>
-    log(`${method} ${short(u)} ${status} request ${scrub(requestBody)} response ${scrub(responseText)}`, "player-body");
+  // A Connect cluster (connect-state responses) in a few fields: which
+  // device the server considers active and which devices it knows.
+  const clusterSummary = (text) => {
+    try {
+      const c = JSON.parse(text);
+      if (!c || typeof c !== "object" || (!c.devices && !c.player_state)) return null;
+      const short8 = (id) => String(id || "-").slice(0, 8);
+      const p = c.player_state || {};
+      return JSON.stringify({
+        active: short8(c.active_device_id),
+        devices: Object.entries(c.devices || {}).map(
+          ([id, d]) =>
+            `${short8(id)} ${d.name || "?"}/${d.device_type || "?"}${d.is_active ? " active" : ""}${d.capabilities?.can_be_player === false ? " no-player" : ""}${d.capabilities?.hidden ? " hidden" : ""}${d.license ? ` ${d.license}` : ""}`,
+        ),
+        player: `playing=${p.is_playing} paused=${p.is_paused} ${p.track?.uri || "-"} ts=${p.timestamp || "-"}`,
+        transfer: c.need_full_player_state ?? c.transfer_data_timestamp ?? undefined,
+        timestamp: c.timestamp,
+        changed: c.changed_fields,
+      });
+    } catch {
+      return null;
+    }
+  };
+  const logBodies = (method, u, requestBody, status, responseText) => {
+    const cluster = typeof responseText === "string" ? clusterSummary(responseText) : null;
+    log(
+      `${method} ${short(u)} ${status} request ${scrub(requestBody)} response ${cluster ? `cluster ${cluster}` : scrub(responseText)}`,
+      "player-body",
+    );
+  };
 
   guard("fetch", () => {
     const fetch = window.fetch;
