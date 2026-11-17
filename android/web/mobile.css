@@ -301,3 +301,16 @@ html.spicetify-android-mobile #spicetify-android-apps {
   width: 100%;
   height: 100%;
 }
+
+/* Touch screens: the Marketplace's install/remove button sits in the card's
+ * play button container, which is only shown on hover and hidden entirely
+ * for coarse pointers by Spicetify's base CSS. Keep it visible and tappable. */
+@media (hover: none), (pointer: coarse) {
+  .marketplace-grid .main-card-PlayButtonContainer,
+  .main-card-PlayButtonContainer:has(.marketplace-installButton) {
+    display: block !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    transform: none !important;
+  }
+}
