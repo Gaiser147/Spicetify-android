@@ -47,6 +47,8 @@ class SpicetifyInterceptor(
         if (request.method != "GET") return null
         val url = request.url
         if (isServiceWorkerScript(url)) return notFound()
+        // Diagnostics (also in safe mode): which headers the WebView sends.
+        if (url.host == WEB_HOST && url.path == EngineManager.BASE_PATH + "echo") return echo(request)
         if (engine.safeMode) return null
         return try {
             when {
@@ -96,8 +98,7 @@ class SpicetifyInterceptor(
     private fun fetch(request: WebResourceRequest): String? {
         val builder = Request.Builder().url(request.url.toString())
         for ((k, v) in request.requestHeaders) {
-            if (k.equals("Range", true) || k.equals("Accept-Encoding", true)) continue
-            builder.header(k, v)
+            if (UserAgents.isForwardedHeader(k, "Range", "Accept-Encoding")) builder.header(k, v)
         }
         builder.header("User-Agent", userAgent)
         http.newCall(builder.build()).execute().use { res ->
@@ -107,6 +108,14 @@ class SpicetifyInterceptor(
             }
             return res.body?.string()
         }
+    }
+
+    /** Answers with the headers the WebView attached to this request. */
+    private fun echo(request: WebResourceRequest): WebResourceResponse {
+        val summary = UserAgents.describeHeaders(request.requestHeaders)
+        DiagnosticsLog.log("headers", summary)
+        val body = org.json.JSONObject().put("headers", summary).toString().toByteArray()
+        return ok(SpicetifyResource("application/json", body), cors = false, cache = false)
     }
 
     private fun spicetifyFile(url: Uri): WebResourceResponse {
@@ -140,8 +149,7 @@ class SpicetifyInterceptor(
         val cookies = CookieManager.getInstance()
         val builder = Request.Builder().url(url)
         for ((k, v) in request.requestHeaders) {
-            if (k.equals("Accept-Encoding", true) || k.equals("Cookie", true)) continue
-            builder.header(k, v)
+            if (UserAgents.isForwardedHeader(k, "Accept-Encoding", "Cookie")) builder.header(k, v)
         }
         builder.header("User-Agent", userAgent)
         cookies.getCookie(url)?.let { builder.header("Cookie", it) }

@@ -33,4 +33,20 @@ class UserAgentsTest {
         assertFalse(UserAgents.isLoginHost("open.spotify.com"))
         assertFalse(UserAgents.isLoginHost(null))
     }
+
+    @Test
+    fun requestedWithHeaderIsNeverForwarded() {
+        assertFalse(UserAgents.isForwardedHeader("X-Requested-With"))
+        assertFalse(UserAgents.isForwardedHeader("x-requested-with", "Range"))
+        assertFalse(UserAgents.isForwardedHeader("range", "Range"))
+        assertTrue(UserAgents.isForwardedHeader("Accept", "Range", "Cookie"))
+    }
+
+    @Test
+    fun describesClientHeaders() {
+        val text = UserAgents.describeHeaders(mapOf("x-requested-with" to "app.spicetify.android", "Sec-CH-UA-Platform" to "\"Linux\""))
+        assertTrue(text.contains("x-requested-with=app.spicetify.android"))
+        assertTrue(text.contains("sec-ch-ua-platform=\"Linux\""))
+        assertTrue(text.contains("sec-ch-ua-mobile=-"))
+    }
 }

@@ -15,20 +15,36 @@ import java.util.Locale
  * the app (Spicetify settings → Diagnostics) without adb.
  */
 object DiagnosticsLog {
-    private const val MAX_LINES = 800
+    // The start of a session (WebView setup, page load, registration) is
+    // kept; later lines rotate.
+    private const val HEAD_LINES = 200
+    private const val MAX_LINES = 1000
+    private val head = ArrayList<String>()
     private val lines = ArrayDeque<String>()
+    private var dropped = 0
     private val time = SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
 
     fun log(tag: String, message: String) {
         val line = "${time.format(Date())} [$tag] ${message.take(1000)}"
         Log.i("Spicetify/$tag", message.take(1000))
         synchronized(lines) {
+            if (head.size < HEAD_LINES) {
+                head.add(line)
+                return
+            }
             lines.addLast(line)
-            while (lines.size > MAX_LINES) lines.removeFirst()
+            while (lines.size > MAX_LINES) {
+                lines.removeFirst()
+                dropped++
+            }
         }
     }
 
-    fun clear() = synchronized(lines) { lines.clear() }
+    fun clear() = synchronized(lines) {
+        head.clear()
+        lines.clear()
+        dropped = 0
+    }
 
     /** Device and app details plus the log, for copying into a bug report. */
     fun report(context: Context): String {
@@ -39,7 +55,13 @@ object DiagnosticsLog {
             appendLine("WebView: ${webView?.packageName ?: "?"} ${webView?.versionName ?: "?"}")
             appendLine("----")
         }
-        val body = synchronized(lines) { lines.joinToString("\n") }
+        val body = synchronized(lines) {
+            buildString {
+                head.forEach { appendLine(it) }
+                if (dropped > 0) appendLine("… $dropped lines omitted …")
+                append(lines.joinToString("\n"))
+            }
+        }
         return header + body
     }
 }
