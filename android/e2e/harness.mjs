@@ -93,35 +93,57 @@ export async function startHarness({ out, marketplace = "", apps: baseApps = ["l
     });
 
     await context.addInitScript({ content: boot });
-    await context.route("https://open.spotifycdn.com/cdn/build/web-player/**", async (route) => {
-      const url = route.request().url();
-      const m = url.match(/\/spicetify-routes-(.+?)(?:\.[^./]+)?\.(js|css)(?:\?|$)/);
-      if (m) {
-        const r = await fetch(`${hostUrl}/custom-app/${m[1]}.${m[2]}`);
+    // Requests can still be in flight when the browser closes; their errors
+    // must not crash the run.
+    const safe = (handler) => async (route) => {
+      try {
+        await handler(route);
+      } catch (e) {
+        if (!/closed|Target page|browser context/i.test(String(e?.message))) errors.push(`[route] ${e?.message || e}`);
+      }
+    };
+    await context.route(
+      "https://open.spotifycdn.com/cdn/build/web-player/**",
+      safe(async (route) => {
+        const url = route.request().url();
+        const m = url.match(/\/spicetify-routes-(.+?)(?:\.[^./]+)?\.(js|css)(?:\?|$)/);
+        if (m) {
+          const r = await fetch(`${hostUrl}/custom-app/${m[1]}.${m[2]}`);
+          return route.fulfill({
+            status: r.status,
+            body: await r.text(),
+            headers: { "content-type": m[2] === "js" ? "text/javascript" : "text/css", "access-control-allow-origin": "*" },
+          });
+        }
+        if (!/\.(js|css)(\?|$)/.test(url)) return route.continue();
+        const response = await route.fetch();
+        const body = await response.text();
+        const patched = await (await fetch(`${hostUrl}/patch?url=${encodeURIComponent(url)}`, { method: "POST", body })).text();
+        const headers = { ...response.headers() };
+        delete headers["content-length"];
+        delete headers["content-encoding"];
+        return route.fulfill({ status: response.status(), headers, body: patched });
+      }),
+    );
+    await context.route(
+      "https://open.spotify.com/__spicetify/**",
+      safe(async (route) => {
+        const path = new URL(route.request().url()).pathname;
+        const r = await fetch(`${hostUrl}${path}`);
         return route.fulfill({
           status: r.status,
-          body: await r.text(),
-          headers: { "content-type": m[2] === "js" ? "text/javascript" : "text/css", "access-control-allow-origin": "*" },
+          body: Buffer.from(await r.arrayBuffer()),
+          headers: { "content-type": r.headers.get("content-type") || "application/octet-stream" },
         });
-      }
-      if (!/\.(js|css)(\?|$)/.test(url)) return route.continue();
-      const response = await route.fetch();
-      const body = await response.text();
-      const patched = await (await fetch(`${hostUrl}/patch?url=${encodeURIComponent(url)}`, { method: "POST", body })).text();
-      const headers = { ...response.headers() };
-      delete headers["content-length"];
-      delete headers["content-encoding"];
-      return route.fulfill({ status: response.status(), headers, body: patched });
-    });
-    await context.route("https://open.spotify.com/__spicetify/**", async (route) => {
-      const path = new URL(route.request().url()).pathname;
-      const r = await fetch(`${hostUrl}${path}`);
-      return route.fulfill({
-        status: r.status,
-        body: Buffer.from(await r.arrayBuffer()),
-        headers: { "content-type": r.headers.get("content-type") || "application/octet-stream" },
-      });
-    });
+      }),
+    );
+
+    // Stop routing before closing so in-flight handlers end cleanly.
+    const close = browser.close.bind(browser);
+    browser.close = async () => {
+      await context.unrouteAll({ behavior: "ignoreErrors" }).catch(() => {});
+      await close();
+    };
 
     await page.goto("https://open.spotify.com/", { waitUntil: "domcontentloaded", timeout: 90_000 });
     await waitForStablePage(page);
