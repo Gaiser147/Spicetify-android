@@ -69,12 +69,12 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
+      # The GitHub runner image ships the Android SDK and command-line tools.
       - name: Install NDK and gomobile
         run: |
-          sdkmanager --install "ndk;${NDK_VERSION}" "platforms;android-36" "build-tools;36.0.0"
+          SDKMANAGER="$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager | sort -V | tail -1)"
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+          "$SDKMANAGER" --install "ndk;${NDK_VERSION}" "platforms;android-36" "build-tools;36.0.0"
           cd android/engine
           go install golang.org/x/mobile/cmd/gomobile golang.org/x/mobile/cmd/gobind
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
